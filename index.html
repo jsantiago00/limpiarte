@@ -695,9 +695,11 @@
     margin-top: 10px;
     font-size: 13px;
   }
-  .transit-result .arrival { display: flex; justify-content: space-between; align-items: center; padding: 6px 4px; border-radius: 8px; gap: 8px; }
+  .transit-result .arrival { padding: 6px 8px; border-radius: 8px; }
   .transit-result .arrival + .arrival { margin-top: 2px; }
   .transit-result .arrival.convenient { background: var(--success-bg); }
+  .transit-result .arrival-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .transit-result .arrival-eta { font-size: 11px; font-weight: 700; color: var(--success); margin-top: 2px; }
   .tag-ok {
     display: inline-block;
     background: var(--success);
@@ -1601,21 +1603,37 @@
       });
   }
 
-  function arrivalsHtml(arrivals, routeSet) {
+  function fmtClockTime(ms) {
+    var d = new Date(ms);
+    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  function arrivalsHtml(arrivals, destIndex) {
     if (!arrivals.length) return '<p style="font-size:12.5px;color:var(--muted);margin:4px 0 0;">No hay llegadas previstas por ahora.</p>';
     var now = Date.now();
-    var sorted = arrivals.slice().sort(function(a, b) {
-      var aOk = routeSet && routeSet[a.routeShortName || a.routeId] ? 0 : 1;
-      var bOk = routeSet && routeSet[b.routeShortName || b.routeId] ? 0 : 1;
-      if (aOk !== bOk) return aOk - bOk;
-      return (a.predictedArrivalTime || a.scheduledArrivalTime) - (b.predictedArrivalTime || b.scheduledArrivalTime);
+    var enriched = arrivals.map(function(a) {
+      return { a: a, destMatch: (destIndex && a.tripId) ? destIndex[a.tripId] : null };
     });
-    var rows = sorted.slice(0, 5).map(function(a) {
+    enriched.sort(function(x, y) {
+      var xOk = x.destMatch ? 0 : 1, yOk = y.destMatch ? 0 : 1;
+      if (xOk !== yOk) return xOk - yOk;
+      return (x.a.predictedArrivalTime || x.a.scheduledArrivalTime) - (y.a.predictedArrivalTime || y.a.scheduledArrivalTime);
+    });
+    var rows = enriched.slice(0, 5).map(function(item) {
+      var a = item.a;
       var t = a.predictedArrivalTime || a.scheduledArrivalTime;
       var mins = Math.round((t - now) / 60000);
       var route = a.routeShortName || a.routeId || '';
-      var convenient = !!(routeSet && routeSet[route]);
-      return '<div class="arrival' + (convenient ? ' convenient' : '') + '"><span>' + escapeHtml(route) + ' · ' + escapeHtml(a.tripHeadsign || '') + (convenient ? ' <span class="tag-ok">te conviene</span>' : '') + '</span><span>' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>';
+      var convenient = !!item.destMatch;
+      var etaLine = '';
+      if (convenient) {
+        var dt = item.destMatch.predictedArrivalTime || item.destMatch.scheduledArrivalTime;
+        etaLine = '<div class="arrival-eta">Llegás cerca de las ' + fmtClockTime(dt) + '</div>';
+      }
+      return '<div class="arrival' + (convenient ? ' convenient' : '') + '">' +
+        '<div class="arrival-top"><span>' + escapeHtml(route) + ' · ' + escapeHtml(a.tripHeadsign || '') + (convenient ? ' <span class="tag-ok">te conviene</span>' : '') + '</span><span>' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>' +
+        etaLine +
+      '</div>';
     }).join('');
     return '<div class="transit-result">' + rows + '</div>';
   }
@@ -1628,32 +1646,29 @@
       '</p>';
   }
 
-  function fetchRouteSet(stopId) {
+  function fetchTripIndex(stopId) {
     return fetchArrivals(stopId).then(function(data) {
       var arrivals = (data.entry && data.entry.arrivalsAndDepartures) || [];
-      var set = {};
-      arrivals.forEach(function(a) {
-        var r = a.routeShortName || a.routeId;
-        if (r) set[r] = true;
-      });
-      return set;
+      var idx = {};
+      arrivals.forEach(function(a) { if (a.tripId) idx[a.tripId] = a; });
+      return idx;
     }).catch(function() { return {}; });
   }
 
-  function showOriginStop(elId, stopPromise, routeSetPromise) {
+  function showOriginStop(elId, stopPromise, destIndexPromise) {
     var el = document.getElementById(elId);
     stopPromise.then(function(stop) {
       if (!el) return;
       var loc = stopLocationHtml(stop);
       el.innerHTML = loc + '<p class="transit-loading">Buscando horarios...</p>';
-      return Promise.all([fetchArrivals(stop.id).catch(function() { return null; }), routeSetPromise]).then(function(results) {
+      return Promise.all([fetchArrivals(stop.id).catch(function() { return null; }), destIndexPromise]).then(function(results) {
         if (!el) return;
-        var data = results[0], routeSet = results[1] || {};
+        var data = results[0], destIndex = results[1] || {};
         if (!data) {
           el.innerHTML = loc + '<p style="font-size:12.5px;color:var(--muted);">No se pudieron cargar los horarios ahora. Probá con Google Maps.</p>';
           return;
         }
-        el.innerHTML = loc + arrivalsHtml((data.entry && data.entry.arrivalsAndDepartures) || [], routeSet);
+        el.innerHTML = loc + arrivalsHtml((data.entry && data.entry.arrivalsAndDepartures) || [], destIndex);
       });
     }).catch(function(err) {
       if (el) el.innerHTML = '<p style="font-size:13px;color:var(--muted);">' + escapeHtml(err.message || 'No se pudo buscar la parada.') + '</p>';
@@ -1680,7 +1695,7 @@
     openModal(html);
 
     var destStopPromise;
-    if (home.stopId && home.stopName) {
+    if (home.stopId && home.stopName && home.stopLat && home.stopLon) {
       destStopPromise = Promise.resolve({ id: home.stopId, name: home.stopName, address: home.stopAddress, lat: home.stopLat, lon: home.stopLon });
     } else if (home.lat && home.lon) {
       destStopPromise = findNearestStopByCoords(home.lat, home.lon);
@@ -1688,7 +1703,7 @@
       destStopPromise = Promise.reject(new Error('Este hogar no tiene ubicación guardada todavía.'));
     }
     showDestStop('destStopContent', destStopPromise);
-    var destRouteSetPromise = destStopPromise.then(function(stop) { return fetchRouteSet(stop.id); }).catch(function() { return {}; });
+    var destIndexPromise = destStopPromise.then(function(stop) { return fetchTripIndex(stop.id); }).catch(function() { return {}; });
 
     getCurrentPosition().then(function(pos) {
       var link = document.getElementById('transitMapsLink');
@@ -1696,7 +1711,7 @@
         var dest = (home.lat && home.lon) ? (home.lat + ',' + home.lon) : encodeURIComponent(home.address || '');
         link.href = 'https://www.google.com/maps/dir/?api=1&origin=' + pos.lat + ',' + pos.lon + '&destination=' + dest + '&travelmode=transit';
       }
-      showOriginStop('originStopContent', findNearestStopByCoords(pos.lat, pos.lon), destRouteSetPromise);
+      showOriginStop('originStopContent', findNearestStopByCoords(pos.lat, pos.lon), destIndexPromise);
     }).catch(function(err) {
       var el = document.getElementById('originStopContent');
       if (el) el.innerHTML = '<p style="font-size:13px;color:var(--muted);">No pudimos usar tu ubicación (' + escapeHtml(err.message) + '). Activala para calcular la ruta y ver tu parada más cercana.</p>';
