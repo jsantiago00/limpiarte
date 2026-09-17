@@ -695,12 +695,37 @@
     margin-top: 10px;
     font-size: 13px;
   }
-  .transit-result .arrival { padding: 6px 8px; border-radius: 8px; }
-  .transit-result .arrival + .arrival { margin-top: 2px; }
+  .transit-result .arrival { padding: 10px 10px; border-radius: 10px; }
+  .transit-result .arrival + .arrival { margin-top: 6px; }
   .transit-result .arrival.convenient { background: var(--success-bg); }
   .transit-result .arrival-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .transit-result .arrival-eta { font-size: 11px; font-weight: 700; color: var(--success); margin-top: 2px; }
   .transit-result .arrival-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .journey-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .journey-head .journey-when { font-size: 12.5px; font-weight: 700; color: var(--success); }
+  .journey-step { display: flex; gap: 8px; padding: 4px 0; }
+  .journey-step + .journey-step { border-top: 1px dashed var(--border); }
+  .step-tag {
+    flex-shrink: 0;
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    height: fit-content;
+    margin-top: 1px;
+    background: var(--primary);
+    color: #fff;
+    width: 44px;
+    text-align: center;
+  }
+  .step-tag.alight { background: var(--text); opacity: 0.75; }
+  .step-body { flex: 1; min-width: 0; }
+  .step-route { font-size: 12.5px; font-weight: 700; }
+  .step-place { font-size: 12px; color: var(--text); }
+  .step-place .link-btn { font-size: 11px; margin-left: 4px; white-space: nowrap; }
+  .step-time { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .tag-ok {
     display: inline-block;
     background: var(--success);
@@ -1652,12 +1677,29 @@
     return '<div class="transit-result">' + rows + '</div>';
   }
 
+  function mapsSearchLink(stop) {
+    return (stop && stop.lat && stop.lon) ? 'https://www.google.com/maps/search/?api=1&query=' + stop.lat + ',' + stop.lon : null;
+  }
+
   function stopLocationHtml(stop) {
-    var mapsLink = (stop.lat && stop.lon) ? 'https://www.google.com/maps/search/?api=1&query=' + stop.lat + ',' + stop.lon : null;
+    var mapsLink = mapsSearchLink(stop);
     return '<p style="font-size:13.5px;font-weight:700;margin:0 0 2px;">' + escapeHtml(stop.address || stop.name) + '</p>' +
       '<p style="font-size:11.5px;margin:0 0 6px;color:var(--muted);">Parada ' + escapeHtml(stop.name) +
       (mapsLink ? ' · <a href="' + mapsLink + '" target="_blank" rel="noopener" class="link-btn" style="font-size:11.5px;">Ver en el mapa</a>' : '') +
       '</p>';
+  }
+
+  function journeyStep(tag, tagClass, routeLine, place, timeLine) {
+    var routePart = routeLine ? '<div class="step-route">' + escapeHtml(routeLine) + '</div>' : '';
+    var placePart = '';
+    if (place && place.label) {
+      var link = mapsSearchLink(place.stop);
+      placePart = '<div class="step-place">' + escapeHtml(place.label) + (link ? ' · <a href="' + link + '" target="_blank" rel="noopener" class="link-btn">Ver en el mapa</a>' : '') + '</div>';
+    }
+    return '<div class="journey-step">' +
+      '<span class="step-tag ' + tagClass + '">' + tag + '</span>' +
+      '<div class="step-body">' + routePart + placePart + '<div class="step-time">' + escapeHtml(timeLine) + '</div></div>' +
+    '</div>';
   }
 
   function buildStopArrivals(stops) {
@@ -1750,6 +1792,8 @@
           destTime: destPredicted
         });
       });
+      var cutoff = Date.now() - 30000;
+      candidates = candidates.filter(function(c) { return c.originTime > cutoff; });
       candidates.sort(function(a, b) { return a.originTime - b.originTime; });
       return candidates.slice(0, limit || 5);
     });
@@ -1849,6 +1893,8 @@
         destStop: cov.destStop, destTime: cov.destTime
       });
     });
+    var cutoff = Date.now() - 30000;
+    candidates = candidates.filter(function(c) { return c.originTime > cutoff && c.transferBoard > cutoff; });
     candidates.sort(function(a, b) { return a.originTime - b.originTime; });
     return candidates.slice(0, limit || 5);
   }
@@ -1858,9 +1904,9 @@
     return candidates.map(function(c) {
       var mins = Math.round((c.originTime - now) / 60000);
       return '<div class="arrival convenient">' +
-        '<div class="arrival-top"><span>' + escapeHtml(c.route) + ' · ' + escapeHtml(c.headsign) + '</span><span>' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>' +
-        '<div class="arrival-sub">Subís: ' + escapeHtml(c.originStop.address || c.originStop.name) + '</div>' +
-        '<div class="arrival-eta">Bajás cerca de ' + escapeHtml(c.destStop.address || c.destStop.name) + ' · llegás ~' + fmtClockTime(c.destTime) + '</div>' +
+        '<div class="journey-head"><span class="step-route">' + escapeHtml(c.route + ' · ' + c.headsign) + '</span><span class="journey-when">' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>' +
+        journeyStep('Subís', 'board', '', { label: c.originStop.address || c.originStop.name, stop: c.originStop }, 'Sale a las ' + fmtClockTime(c.originTime)) +
+        journeyStep('Bajás', 'alight', '', { label: c.destStop.address || c.destStop.name, stop: c.destStop }, 'Llegás ~' + fmtClockTime(c.destTime)) +
       '</div>';
     }).join('');
   }
@@ -1869,13 +1915,13 @@
     var now = Date.now();
     return candidates.map(function(c) {
       var mins = Math.round((c.originTime - now) / 60000);
-      var transferName = c.transferStopRef ? (c.transferStopRef.address || c.transferStopRef.name) : 'la parada de trasbordo';
+      var transferLabel = c.transferStopRef ? (c.transferStopRef.address || c.transferStopRef.name) : 'la parada de trasbordo';
       return '<div class="arrival convenient">' +
-        '<div class="arrival-top"><span>' + escapeHtml(c.leg1Route) + ' · ' + escapeHtml(c.leg1Headsign) + ' <span class="tag-ok">con transbordo</span></span><span>' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>' +
-        '<div class="arrival-sub">Subís: ' + escapeHtml(c.originStop.address || c.originStop.name) + '</div>' +
-        '<div class="arrival-sub">Bajás en ' + escapeHtml(transferName) + ' · llegás ~' + fmtClockTime(c.transferArrival) + '</div>' +
-        '<div class="arrival-sub">Subís línea ' + escapeHtml(c.leg2Route) + ' · ' + escapeHtml(c.leg2Headsign) + ' · sale ~' + fmtClockTime(c.transferBoard) + '</div>' +
-        '<div class="arrival-eta">Bajás cerca de ' + escapeHtml(c.destStop.address || c.destStop.name) + ' · llegás ~' + fmtClockTime(c.destTime) + '</div>' +
+        '<div class="journey-head"><span class="step-route">' + escapeHtml(c.leg1Route) + ' <span class="tag-ok">con transbordo</span></span><span class="journey-when">' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>' +
+        journeyStep('Subís', 'board', c.leg1Headsign, { label: c.originStop.address || c.originStop.name, stop: c.originStop }, 'Sale a las ' + fmtClockTime(c.originTime)) +
+        journeyStep('Bajás', 'alight', '', { label: transferLabel, stop: c.transferStopRef }, 'Llegás ~' + fmtClockTime(c.transferArrival)) +
+        journeyStep('Subís', 'board', c.leg2Route + ' · ' + c.leg2Headsign, null, 'Sale ~' + fmtClockTime(c.transferBoard)) +
+        journeyStep('Bajás', 'alight', '', { label: c.destStop.address || c.destStop.name, stop: c.destStop }, 'Llegás ~' + fmtClockTime(c.destTime)) +
       '</div>';
     }).join('');
   }
