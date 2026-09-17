@@ -695,8 +695,22 @@
     margin-top: 10px;
     font-size: 13px;
   }
-  .transit-result .arrival { display: flex; justify-content: space-between; padding: 4px 0; }
-  .transit-result .arrival + .arrival { border-top: 1px solid var(--border); }
+  .transit-result .arrival { display: flex; justify-content: space-between; align-items: center; padding: 6px 4px; border-radius: 8px; gap: 8px; }
+  .transit-result .arrival + .arrival { margin-top: 2px; }
+  .transit-result .arrival.convenient { background: var(--success-bg); }
+  .tag-ok {
+    display: inline-block;
+    background: var(--success);
+    color: #fff;
+    font-size: 9.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 1px 6px;
+    border-radius: 999px;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
   .transit-loading { color: var(--muted); font-size: 12.5px; }
 
   .link-btn { color: var(--primary); text-decoration: none; font-weight: 700; font-size: 13px; }
@@ -1353,7 +1367,7 @@
     if (isEdit) {
       html += '<div class="section-title">Transporte</div>' +
         '<div id="transitBox">' +
-          (home.stopId ? '<p style="font-size:12.5px;color:var(--muted);">Parada guardada: ' + escapeHtml(home.stopName || home.stopId) + '</p>' : '<p style="font-size:12.5px;color:var(--muted);">Sin parada guardada</p>') +
+          (home.stopId ? '<p style="font-size:12.5px;color:var(--muted);">Parada guardada: ' + escapeHtml(home.stopAddress || home.stopName || home.stopId) + '</p>' : '<p style="font-size:12.5px;color:var(--muted);">Sin parada guardada</p>') +
         '</div>' +
         '<div class="btn-row">' +
           '<button class="btn btn-outline btn-sm" id="hFindStop" type="button">Buscar parada cercana</button>' +
@@ -1418,6 +1432,9 @@
         if (coordsChanged) {
           delete home.stopId;
           delete home.stopName;
+          delete home.stopAddress;
+          delete home.stopLat;
+          delete home.stopLon;
         }
         savedHome = home;
         toast('Hogar actualizado');
@@ -1572,8 +1589,11 @@
       .then(function(stop) {
         home.stopId = stop.id;
         home.stopName = stop.name;
+        home.stopAddress = stop.address || '';
+        home.stopLat = stop.lat;
+        home.stopLon = stop.lon;
         save();
-        if (box) box.innerHTML = '<p style="font-size:12.5px;color:var(--muted);">Parada guardada: ' + escapeHtml(stop.name) + '</p>';
+        if (box) box.innerHTML = '<p style="font-size:12.5px;color:var(--muted);">Parada guardada: ' + escapeHtml(stop.address || stop.name) + '</p>';
         toast('Parada guardada');
       })
       .catch(function(err) {
@@ -1581,30 +1601,69 @@
       });
   }
 
-  function arrivalsHtml(arrivals) {
+  function arrivalsHtml(arrivals, routeSet) {
     if (!arrivals.length) return '<p style="font-size:12.5px;color:var(--muted);margin:4px 0 0;">No hay llegadas previstas por ahora.</p>';
     var now = Date.now();
-    var rows = arrivals.slice(0, 5).map(function(a) {
+    var sorted = arrivals.slice().sort(function(a, b) {
+      var aOk = routeSet && routeSet[a.routeShortName || a.routeId] ? 0 : 1;
+      var bOk = routeSet && routeSet[b.routeShortName || b.routeId] ? 0 : 1;
+      if (aOk !== bOk) return aOk - bOk;
+      return (a.predictedArrivalTime || a.scheduledArrivalTime) - (b.predictedArrivalTime || b.scheduledArrivalTime);
+    });
+    var rows = sorted.slice(0, 5).map(function(a) {
       var t = a.predictedArrivalTime || a.scheduledArrivalTime;
       var mins = Math.round((t - now) / 60000);
-      return '<div class="arrival"><span>' + escapeHtml(a.routeShortName || a.routeId || '') + ' · ' + escapeHtml(a.tripHeadsign || '') + '</span><span>' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>';
+      var route = a.routeShortName || a.routeId || '';
+      var convenient = !!(routeSet && routeSet[route]);
+      return '<div class="arrival' + (convenient ? ' convenient' : '') + '"><span>' + escapeHtml(route) + ' · ' + escapeHtml(a.tripHeadsign || '') + (convenient ? ' <span class="tag-ok">te conviene</span>' : '') + '</span><span>' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>';
     }).join('');
     return '<div class="transit-result">' + rows + '</div>';
   }
 
-  function showStopWithArrivals(elId, stopPromise) {
+  function stopLocationHtml(stop) {
+    var mapsLink = (stop.lat && stop.lon) ? 'https://www.google.com/maps/search/?api=1&query=' + stop.lat + ',' + stop.lon : null;
+    return '<p style="font-size:13.5px;font-weight:700;margin:0 0 2px;">' + escapeHtml(stop.address || stop.name) + '</p>' +
+      '<p style="font-size:11.5px;margin:0 0 6px;color:var(--muted);">Parada ' + escapeHtml(stop.name) +
+      (mapsLink ? ' · <a href="' + mapsLink + '" target="_blank" rel="noopener" class="link-btn" style="font-size:11.5px;">Ver en el mapa</a>' : '') +
+      '</p>';
+  }
+
+  function fetchRouteSet(stopId) {
+    return fetchArrivals(stopId).then(function(data) {
+      var arrivals = (data.entry && data.entry.arrivalsAndDepartures) || [];
+      var set = {};
+      arrivals.forEach(function(a) {
+        var r = a.routeShortName || a.routeId;
+        if (r) set[r] = true;
+      });
+      return set;
+    }).catch(function() { return {}; });
+  }
+
+  function showOriginStop(elId, stopPromise, routeSetPromise) {
     var el = document.getElementById(elId);
     stopPromise.then(function(stop) {
       if (!el) return;
-      el.innerHTML = '<p style="font-size:13px;margin:0 0 4px;">' + escapeHtml(stop.name) + '</p><p class="transit-loading">Buscando horarios...</p>';
-      return fetchArrivals(stop.id).then(function(data) {
+      var loc = stopLocationHtml(stop);
+      el.innerHTML = loc + '<p class="transit-loading">Buscando horarios...</p>';
+      return Promise.all([fetchArrivals(stop.id).catch(function() { return null; }), routeSetPromise]).then(function(results) {
         if (!el) return;
-        el.innerHTML = '<p style="font-size:13px;margin:0 0 4px;">' + escapeHtml(stop.name) + '</p>' +
-          arrivalsHtml((data.entry && data.entry.arrivalsAndDepartures) || []);
-      }).catch(function() {
-        if (!el) return;
-        el.innerHTML = '<p style="font-size:13px;margin:0 0 4px;">' + escapeHtml(stop.name) + '</p><p style="font-size:12.5px;color:var(--muted);">No se pudieron cargar los horarios ahora. Probá con Google Maps.</p>';
+        var data = results[0], routeSet = results[1] || {};
+        if (!data) {
+          el.innerHTML = loc + '<p style="font-size:12.5px;color:var(--muted);">No se pudieron cargar los horarios ahora. Probá con Google Maps.</p>';
+          return;
+        }
+        el.innerHTML = loc + arrivalsHtml((data.entry && data.entry.arrivalsAndDepartures) || [], routeSet);
       });
+    }).catch(function(err) {
+      if (el) el.innerHTML = '<p style="font-size:13px;color:var(--muted);">' + escapeHtml(err.message || 'No se pudo buscar la parada.') + '</p>';
+    });
+  }
+
+  function showDestStop(elId, stopPromise) {
+    var el = document.getElementById(elId);
+    stopPromise.then(function(stop) {
+      if (el) el.innerHTML = stopLocationHtml(stop);
     }).catch(function(err) {
       if (el) el.innerHTML = '<p style="font-size:13px;color:var(--muted);">' + escapeHtml(err.message || 'No se pudo buscar la parada.') + '</p>';
     });
@@ -1613,22 +1672,23 @@
   function openTransitSheet(home) {
     var html = '<h2>Cómo llego</h2>' +
       '<p style="font-size:13px;color:var(--muted);margin-top:-6px;">' + escapeHtml(home.name) + '</p>' +
-      '<div class="section-title">Parada cerca de la casa</div>' +
-      '<div id="destStopContent"><p class="transit-loading">Buscando parada...</p></div>' +
-      '<div class="section-title">Tu parada más cercana</div>' +
+      '<div class="section-title">Te subís acá</div>' +
       '<div id="originStopContent"><p class="transit-loading">Ubicándote...</p></div>' +
+      '<div class="section-title">Te bajás cerca de la casa</div>' +
+      '<div id="destStopContent"><p class="transit-loading">Buscando parada...</p></div>' +
       '<div class="btn-row"><a class="btn btn-primary" style="text-align:center;line-height:2.2;text-decoration:none;" id="transitMapsLink" href="' + mapsUrl(home) + '" target="_blank" rel="noopener">Ver ruta completa en Google Maps</a></div>';
     openModal(html);
 
     var destStopPromise;
     if (home.stopId && home.stopName) {
-      destStopPromise = Promise.resolve({ id: home.stopId, name: home.stopName });
+      destStopPromise = Promise.resolve({ id: home.stopId, name: home.stopName, address: home.stopAddress, lat: home.stopLat, lon: home.stopLon });
     } else if (home.lat && home.lon) {
       destStopPromise = findNearestStopByCoords(home.lat, home.lon);
     } else {
       destStopPromise = Promise.reject(new Error('Este hogar no tiene ubicación guardada todavía.'));
     }
-    showStopWithArrivals('destStopContent', destStopPromise);
+    showDestStop('destStopContent', destStopPromise);
+    var destRouteSetPromise = destStopPromise.then(function(stop) { return fetchRouteSet(stop.id); }).catch(function() { return {}; });
 
     getCurrentPosition().then(function(pos) {
       var link = document.getElementById('transitMapsLink');
@@ -1636,7 +1696,7 @@
         var dest = (home.lat && home.lon) ? (home.lat + ',' + home.lon) : encodeURIComponent(home.address || '');
         link.href = 'https://www.google.com/maps/dir/?api=1&origin=' + pos.lat + ',' + pos.lon + '&destination=' + dest + '&travelmode=transit';
       }
-      showStopWithArrivals('originStopContent', findNearestStopByCoords(pos.lat, pos.lon));
+      showOriginStop('originStopContent', findNearestStopByCoords(pos.lat, pos.lon), destRouteSetPromise);
     }).catch(function(err) {
       var el = document.getElementById('originStopContent');
       if (el) el.innerHTML = '<p style="font-size:13px;color:var(--muted);">No pudimos usar tu ubicación (' + escapeHtml(err.message) + '). Activala para calcular la ruta y ver tu parada más cercana.</p>';
