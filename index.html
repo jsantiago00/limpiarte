@@ -818,12 +818,11 @@
         '<p class="meta">' + dateLabel + ' · ' + (shift.startTime || '') + (home && home.address ? ' · ' + escapeHtml(home.address) : '') + '</p>' +
         '<div class="actions">' +
           (home && home.phone ? '<a href="' + waUrl(home.phone) + '" target="_blank" rel="noopener">WhatsApp</a>' : '') +
-          (home ? '<a href="' + mapsUrl(home) + '" target="_blank" rel="noopener">Cómo llego</a>' : '') +
-          (home && home.stopId ? '<button data-arrivals="' + home.id + '">Colectivo</button>' : '') +
+          (home ? '<button data-howto="' + home.id + '">Cómo llego</button>' : '') +
         '</div>' +
       '</div>';
-    var arrBtn = root.querySelector('[data-arrivals]');
-    if (arrBtn) arrBtn.addEventListener('click', function() { openTransitSheet(home); });
+    var howtoBtn = root.querySelector('[data-howto]');
+    if (howtoBtn) howtoBtn.addEventListener('click', function() { openTransitSheet(home); });
   }
 
   // ---------- Render: agenda ----------
@@ -1184,6 +1183,15 @@
       '<div class="field"><label>Nombre</label><input type="text" id="hName" value="' + (home ? escapeHtml(home.name) : '') + '" placeholder="Ej: Familia Pérez"></div>' +
       '<div class="field"><label>Teléfono / WhatsApp</label><input type="tel" id="hPhone" value="' + (home ? escapeHtml(home.phone || '') : '') + '" placeholder="Ej: 2615551234"></div>' +
       '<div class="field"><label>Dirección</label><input type="text" id="hAddress" value="' + (home ? escapeHtml(home.address || '') : '') + '" placeholder="Calle y número, ciudad"></div>' +
+      '<div class="field">' +
+        '<label>Marcar ubicación</label>' +
+        '<button type="button" class="btn btn-outline btn-sm" id="hOpenMaps" style="width:100%;">Abrir Google Maps</button>' +
+        '<p style="font-size:11.5px;color:var(--muted);margin:6px 0;">Mantené presionado sobre la casa para soltar un pin, tocá las coordenadas que aparecen para copiarlas, y pegalas acá abajo.</p>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<input type="text" id="hMapsPaste" placeholder="Pegá coordenadas o el link de Maps" style="flex:1;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);color:var(--text);">' +
+          '<button type="button" class="btn btn-outline btn-sm" id="hMapsUse">Usar</button>' +
+        '</div>' +
+      '</div>' +
       '<div class="field-row">' +
         '<div class="field"><label>Latitud (opcional)</label><input type="text" id="hLat" value="' + (home && home.lat ? home.lat : '') + '" placeholder="-32.89"></div>' +
         '<div class="field"><label>Longitud (opcional)</label><input type="text" id="hLon" value="' + (home && home.lon ? home.lon : '') + '" placeholder="-68.84"></div>' +
@@ -1223,6 +1231,19 @@
     '</div>';
 
     openModal(html);
+
+    document.getElementById('hOpenMaps').addEventListener('click', function() {
+      var q = document.getElementById('hAddress').value.trim() || 'Mendoza, Argentina';
+      window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q), '_blank');
+    });
+    document.getElementById('hMapsUse').addEventListener('click', function() {
+      var parsed = parseMapsCoords(document.getElementById('hMapsPaste').value);
+      if (!parsed) { toast('No pude leer esas coordenadas. Pegá "lat, lon" o el link de Maps.'); return; }
+      document.getElementById('hLat').value = parsed.lat;
+      document.getElementById('hLon').value = parsed.lon;
+      document.getElementById('hMapsPaste').value = '';
+      toast('Coordenadas cargadas');
+    });
 
     if (isEdit) {
       document.getElementById('hFindStop').addEventListener('click', function() {
@@ -1339,22 +1360,59 @@
     });
   }
 
+  function parseMapsCoords(text) {
+    text = (text || '').trim();
+    if (!text) return null;
+    var patterns = [
+      /@(-?\d+\.\d+),(-?\d+\.\d+)/,
+      /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
+      /[?&](?:q|query)=(-?\d+\.\d+),(-?\d+\.\d+)/,
+      /^(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/
+    ];
+    for (var i = 0; i < patterns.length; i++) {
+      var m = text.match(patterns[i]);
+      if (m) return { lat: parseFloat(m[1]), lon: parseFloat(m[2]) };
+    }
+    return null;
+  }
+
+  function nearestStopFromList(lat, lon, list) {
+    return list.reduce(function(best, s) {
+      var d = haversine(lat, lon, s.lat, s.lon);
+      return (!best || d < best.d) ? { stop: s, d: d } : best;
+    }, null);
+  }
+
+  function findNearestStopByCoords(lat, lon) {
+    return fetchOBA('stops-for-location.json', { lat: lat, lon: lon, latSpan: 0.006, lonSpan: 0.006 })
+      .then(function(data) {
+        var list = data.list || data.stops || [];
+        if (!list.length) throw new Error('Sin paradas cercanas');
+        return nearestStopFromList(lat, lon, list).stop;
+      });
+  }
+
+  function getCurrentPosition() {
+    return new Promise(function(resolve, reject) {
+      if (!navigator.geolocation) { reject(new Error('sin soporte de geolocalización')); return; }
+      navigator.geolocation.getCurrentPosition(
+        function(pos) { resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }); },
+        function(err) { reject(new Error(err.message || 'permiso denegado')); },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+      );
+    });
+  }
+
   function findStopForHome(home) {
     if (!home.lat || !home.lon) { toast('Cargá latitud y longitud primero'); return; }
     var box = document.getElementById('transitBox');
     if (box) box.innerHTML = '<p class="transit-loading">Buscando parada cercana...</p>';
-    fetchOBA('stops-for-location.json', { lat: home.lat, lon: home.lon, latSpan: 0.006, lonSpan: 0.006 })
-      .then(function(data) {
-        var list = data.list || data.stops || [];
-        if (!list.length) throw new Error('Sin paradas cercanas');
-        var nearest = list.reduce(function(best, s) {
-          var d = haversine(home.lat, home.lon, s.lat, s.lon);
-          return (!best || d < best.d) ? { stop: s, d: d } : best;
-        }, null);
-        home.stopId = nearest.stop.id;
-        home.stopName = nearest.stop.name;
+    findNearestStopByCoords(home.lat, home.lon)
+      .then(function(stop) {
+        home.stopId = stop.id;
+        home.stopName = stop.name;
         save();
-        if (box) box.innerHTML = '<p style="font-size:12.5px;color:var(--muted);">Parada guardada: ' + escapeHtml(nearest.stop.name) + '</p>';
+        if (box) box.innerHTML = '<p style="font-size:12.5px;color:var(--muted);">Parada guardada: ' + escapeHtml(stop.name) + '</p>';
         toast('Parada guardada');
       })
       .catch(function(err) {
@@ -1365,32 +1423,38 @@
   function openTransitSheet(home) {
     var html = '<h2>Cómo llego</h2>' +
       '<p style="font-size:13px;color:var(--muted);margin-top:-6px;">' + escapeHtml(home.name) + '</p>' +
-      '<div id="transitContent">' + (home.stopId ? '<p class="transit-loading">Buscando próximos colectivos...</p>' : '<p style="font-size:13px;color:var(--muted);">Este hogar no tiene una parada guardada todavía.</p>') + '</div>' +
-      '<div class="btn-row"><a class="btn btn-primary" style="text-align:center;line-height:2.2;text-decoration:none;" href="' + mapsUrl(home) + '" target="_blank" rel="noopener">Abrir en Google Maps</a></div>';
+      '<div class="section-title">Parada cerca de la casa</div>' +
+      '<div id="destStopContent">' + (home.stopName ? '<p style="font-size:13px;">' + escapeHtml(home.stopName) + '</p>' : (home.lat && home.lon ? '<p class="transit-loading">Buscando parada...</p>' : '<p style="font-size:13px;color:var(--muted);">Este hogar no tiene ubicación guardada todavía.</p>')) + '</div>' +
+      '<div class="section-title">Tu parada más cercana</div>' +
+      '<div id="originStopContent"><p class="transit-loading">Ubicándote...</p></div>' +
+      '<div class="btn-row"><a class="btn btn-primary" style="text-align:center;line-height:2.2;text-decoration:none;" id="transitMapsLink" href="' + mapsUrl(home) + '" target="_blank" rel="noopener">Ver colectivo y horario en Google Maps</a></div>' +
+      '<p style="font-size:11px;color:var(--muted);margin-top:6px;">Mendotran no comparte los horarios en tiempo real fuera de su propia app, así que usamos Google Maps para calcular qué colectivo(s) tomar y cuánto tardás.</p>';
     openModal(html);
-    if (home.stopId) {
-      fetchOBA('arrivals-and-departures-for-stop.json', { stopId: home.stopId })
-        .then(function(data) {
-          var arrivals = (data.entry && data.entry.arrivalsAndDepartures) || [];
-          var content = document.getElementById('transitContent');
-          if (!content) return;
-          if (!arrivals.length) {
-            content.innerHTML = '<p style="font-size:13px;color:var(--muted);">No hay llegadas previstas por ahora.</p>';
-            return;
-          }
-          var now = Date.now();
-          var rows = arrivals.slice(0, 5).map(function(a) {
-            var t = a.predictedArrivalTime || a.scheduledArrivalTime;
-            var mins = Math.round((t - now) / 60000);
-            return '<div class="arrival"><span>' + escapeHtml(a.routeShortName || a.routeId || '') + ' · ' + escapeHtml(a.tripHeadsign || '') + '</span><span>' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>';
-          }).join('');
-          content.innerHTML = '<div class="transit-result">' + rows + '</div>';
-        })
-        .catch(function(err) {
-          var content = document.getElementById('transitContent');
-          if (content) content.innerHTML = '<p style="font-size:13px;color:var(--danger);">No se pudo obtener el horario del colectivo. Probá con Google Maps.</p>';
-        });
+
+    if (!home.stopName && home.lat && home.lon) {
+      findNearestStopByCoords(home.lat, home.lon).then(function(stop) {
+        var el = document.getElementById('destStopContent');
+        if (el) el.innerHTML = '<p style="font-size:13px;">' + escapeHtml(stop.name) + '</p>';
+      }).catch(function() {
+        var el = document.getElementById('destStopContent');
+        if (el) el.innerHTML = '<p style="font-size:13px;color:var(--muted);">No se pudo buscar la parada.</p>';
+      });
     }
+
+    getCurrentPosition().then(function(pos) {
+      var link = document.getElementById('transitMapsLink');
+      if (link) {
+        var dest = (home.lat && home.lon) ? (home.lat + ',' + home.lon) : encodeURIComponent(home.address || '');
+        link.href = 'https://www.google.com/maps/dir/?api=1&origin=' + pos.lat + ',' + pos.lon + '&destination=' + dest + '&travelmode=transit';
+      }
+      return findNearestStopByCoords(pos.lat, pos.lon).then(function(stop) {
+        var el = document.getElementById('originStopContent');
+        if (el) el.innerHTML = '<p style="font-size:13px;">' + escapeHtml(stop.name) + '</p>';
+      });
+    }).catch(function(err) {
+      var el = document.getElementById('originStopContent');
+      if (el) el.innerHTML = '<p style="font-size:13px;color:var(--muted);">No pudimos usar tu ubicación (' + escapeHtml(err.message) + '). Activala para calcular la ruta y ver tu parada más cercana.</p>';
+    });
   }
 
   // ---------- Delegated delete-payment clicks ----------
