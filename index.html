@@ -1413,7 +1413,12 @@
       };
       var savedHome;
       if (isEdit) {
+        var coordsChanged = data.lat !== home.lat || data.lon !== home.lon;
         Object.assign(home, data);
+        if (coordsChanged) {
+          delete home.stopId;
+          delete home.stopName;
+        }
         savedHome = home;
         toast('Hogar actualizado');
       } else {
