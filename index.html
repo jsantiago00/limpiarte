@@ -1509,6 +1509,12 @@
     });
   }
 
+  function fetchArrivals(stopId) {
+    return fetchOBA('arrivals-and-departures-for-stop/' + encodeURIComponent(stopId) + '.json', {
+      platform: 'web', v: '', minutesBefore: 0, minutesAfter: 65, version: '1.0'
+    });
+  }
+
   function parseMapsCoords(text) {
     text = (text || '').trim();
     if (!text) return null;
@@ -1591,7 +1597,7 @@
     stopPromise.then(function(stop) {
       if (!el) return;
       el.innerHTML = '<p style="font-size:13px;margin:0 0 4px;">' + escapeHtml(stop.name) + '</p><p class="transit-loading">Buscando horarios...</p>';
-      return fetchOBA('arrivals-and-departures-for-stop.json', { stopId: stop.id }).then(function(data) {
+      return fetchArrivals(stop.id).then(function(data) {
         if (!el) return;
         el.innerHTML = '<p style="font-size:13px;margin:0 0 4px;">' + escapeHtml(stop.name) + '</p>' +
           arrivalsHtml((data.entry && data.entry.arrivalsAndDepartures) || []);
