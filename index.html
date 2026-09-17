@@ -1672,17 +1672,38 @@
   // misma esquina física tiene un stopId distinto según la línea/agencia que se consulte.
   // El código de parada visible ("M5063") sí es estable entre agencias, así que cruzamos
   // por ese código en vez del id interno de la secuencia del viaje.
+  var TRANSFER_BUFFER_MS = 3 * 60000;
+
   function fetchTripDetails(tripId) {
     return fetchOBA('trip-details-for-trip/' + encodeURIComponent(tripId) + '.json', { platform: 'web', v: '', version: '1.0' })
       .then(function(data) {
         var stopTimes = (data.entry && data.entry.schedule && data.entry.schedule.stopTimes) || [];
         var codeById = {};
+        var refByCode = {};
         ((data.references && data.references.stops) || []).forEach(function(s) {
-          codeById[s.id] = s.code || s.name;
+          var code = s.code || s.name;
+          codeById[s.id] = code;
+          refByCode[code] = s;
         });
-        return { stopTimes: stopTimes, codeById: codeById };
+        return { stopTimes: stopTimes, codeById: codeById, refByCode: refByCode };
       })
-      .catch(function() { return { stopTimes: [], codeById: {} }; });
+      .catch(function() { return { stopTimes: [], codeById: {}, refByCode: {} }; });
+  }
+
+  function flattenSoonestTrips(stopResults, limit) {
+    var seen = {};
+    var flat = [];
+    stopResults.forEach(function(r) {
+      r.arrivals.forEach(function(a) {
+        if (!a.tripId || seen[a.tripId]) return;
+        seen[a.tripId] = true;
+        flat.push({ arrival: a, stop: r.stop });
+      });
+    });
+    flat.sort(function(x, y) {
+      return (x.arrival.predictedArrivalTime || x.arrival.scheduledArrivalTime) - (y.arrival.predictedArrivalTime || y.arrival.scheduledArrivalTime);
+    });
+    return flat.slice(0, limit);
   }
 
   // Recorre la secuencia completa de paradas de cada colectivo próximo (no solo los arribos
@@ -1691,20 +1712,7 @@
   function findCandidates(originResults, destStops, limit) {
     var destByCode = {};
     destStops.forEach(function(s) { destByCode[s.name] = s; });
-
-    var seen = {};
-    var flat = [];
-    originResults.forEach(function(r) {
-      r.arrivals.forEach(function(a) {
-        if (!a.tripId || seen[a.tripId]) return;
-        seen[a.tripId] = true;
-        flat.push({ arrival: a, originStop: r.stop });
-      });
-    });
-    flat.sort(function(x, y) {
-      return (x.arrival.predictedArrivalTime || x.arrival.scheduledArrivalTime) - (y.arrival.predictedArrivalTime || y.arrival.scheduledArrivalTime);
-    });
-    var toProbe = flat.slice(0, 15);
+    var toProbe = flattenSoonestTrips(originResults, 15);
 
     return Promise.all(toProbe.map(function(item) {
       return fetchTripDetails(item.arrival.tripId).then(function(details) {
@@ -1717,7 +1725,7 @@
         if (!stopTimes.length) return;
         var originEntry = null;
         for (var i = 0; i < stopTimes.length; i++) {
-          if (codeById[stopTimes[i].stopId] === r.item.originStop.name) { originEntry = stopTimes[i]; break; }
+          if (codeById[stopTimes[i].stopId] === r.item.stop.name) { originEntry = stopTimes[i]; break; }
         }
         if (!originEntry) return;
         var destEntry = null, destStop = null;
@@ -1736,7 +1744,7 @@
         candidates.push({
           route: a.routeShortName || a.routeId || '',
           headsign: a.tripHeadsign || '',
-          originStop: r.item.originStop,
+          originStop: r.item.stop,
           originTime: originPredicted,
           destStop: destStop,
           destTime: destPredicted
@@ -1745,6 +1753,104 @@
       candidates.sort(function(a, b) { return a.originTime - b.originTime; });
       return candidates.slice(0, limit || 5);
     });
+  }
+
+  // Búsqueda "hacia adelante": para cada colectivo próximo cerca tuyo, a qué parada
+  // (y a qué hora) se puede llegar en cada punto de su recorrido.
+  function buildReachableMap(originResults, limit) {
+    var toProbe = flattenSoonestTrips(originResults, limit);
+    return Promise.all(toProbe.map(function(item) {
+      return fetchTripDetails(item.arrival.tripId).then(function(details) { return { item: item, details: details }; });
+    })).then(function(results) {
+      var reachable = {};
+      results.forEach(function(r) {
+        var stopTimes = r.details.stopTimes, codeById = r.details.codeById, refByCode = r.details.refByCode;
+        if (!stopTimes.length) return;
+        var originIdx = -1;
+        for (var i = 0; i < stopTimes.length; i++) {
+          if (codeById[stopTimes[i].stopId] === r.item.stop.name) { originIdx = i; break; }
+        }
+        if (originIdx === -1) return;
+        var a = r.item.arrival;
+        var originPredicted = a.predictedArrivalTime || a.scheduledArrivalTime;
+        var originOffset = stopTimes[originIdx].arrivalTime;
+        for (var j = originIdx + 1; j < stopTimes.length; j++) {
+          var code = codeById[stopTimes[j].stopId];
+          if (!code) continue;
+          var arrivalTime = originPredicted + (stopTimes[j].arrivalTime - originOffset) * 1000;
+          if (!reachable[code] || arrivalTime < reachable[code].arrivalTime) {
+            reachable[code] = {
+              stopRef: refByCode[code],
+              arrivalTime: arrivalTime,
+              route: a.routeShortName || a.routeId || '',
+              headsign: a.tripHeadsign || '',
+              originStop: r.item.stop,
+              originTime: originPredicted
+            };
+          }
+        }
+      });
+      return reachable;
+    });
+  }
+
+  // Búsqueda "hacia atrás": para cada colectivo que está por llegar a una parada cerca
+  // de la casa, en qué paradas anteriores de su recorrido se lo podría abordar y a qué hora.
+  function buildCoverageMap(destResults, destStops, limit) {
+    var destCodes = {};
+    destStops.forEach(function(s) { destCodes[s.name] = s; });
+    var toProbe = flattenSoonestTrips(destResults, limit);
+
+    return Promise.all(toProbe.map(function(item) {
+      return fetchTripDetails(item.arrival.tripId).then(function(details) { return { item: item, details: details }; });
+    })).then(function(results) {
+      var coverage = {};
+      results.forEach(function(r) {
+        var stopTimes = r.details.stopTimes, codeById = r.details.codeById, refByCode = r.details.refByCode;
+        if (!stopTimes.length) return;
+        var destIdx = -1, destCode = null;
+        for (var i = 0; i < stopTimes.length; i++) {
+          var c = codeById[stopTimes[i].stopId];
+          if (c && destCodes[c]) { destIdx = i; destCode = c; break; }
+        }
+        if (destIdx === -1) return;
+        var a = r.item.arrival;
+        var destPredicted = a.predictedArrivalTime || a.scheduledArrivalTime;
+        var destOffset = stopTimes[destIdx].arrivalTime;
+        for (var j = 0; j < destIdx; j++) {
+          var code = codeById[stopTimes[j].stopId];
+          if (!code || coverage[code]) continue;
+          coverage[code] = {
+            stopRef: refByCode[code],
+            boardTime: destPredicted - (destOffset - stopTimes[j].arrivalTime) * 1000,
+            route: a.routeShortName || a.routeId || '',
+            headsign: a.tripHeadsign || '',
+            destStop: destCodes[destCode],
+            destTime: destPredicted
+          };
+        }
+      });
+      return coverage;
+    });
+  }
+
+  function findTwoLegCandidates(reachable, coverage, limit) {
+    var candidates = [];
+    Object.keys(reachable).forEach(function(code) {
+      var cov = coverage[code];
+      if (!cov) return;
+      var reach = reachable[code];
+      if (cov.boardTime < reach.arrivalTime + TRANSFER_BUFFER_MS) return;
+      candidates.push({
+        leg1Route: reach.route, leg1Headsign: reach.headsign,
+        originStop: reach.originStop, originTime: reach.originTime,
+        transferStopRef: reach.stopRef || cov.stopRef, transferArrival: reach.arrivalTime, transferBoard: cov.boardTime,
+        leg2Route: cov.route, leg2Headsign: cov.headsign,
+        destStop: cov.destStop, destTime: cov.destTime
+      });
+    });
+    candidates.sort(function(a, b) { return a.originTime - b.originTime; });
+    return candidates.slice(0, limit || 5);
   }
 
   function candidatesHtml(candidates) {
@@ -1759,17 +1865,36 @@
     }).join('');
   }
 
-  function renderTransitContent(originResults, destStops, candidates) {
+  function twoLegCandidatesHtml(candidates) {
+    var now = Date.now();
+    return candidates.map(function(c) {
+      var mins = Math.round((c.originTime - now) / 60000);
+      var transferName = c.transferStopRef ? (c.transferStopRef.address || c.transferStopRef.name) : 'la parada de trasbordo';
+      return '<div class="arrival convenient">' +
+        '<div class="arrival-top"><span>' + escapeHtml(c.leg1Route) + ' · ' + escapeHtml(c.leg1Headsign) + ' <span class="tag-ok">con transbordo</span></span><span>' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>' +
+        '<div class="arrival-sub">Subís: ' + escapeHtml(c.originStop.address || c.originStop.name) + '</div>' +
+        '<div class="arrival-sub">Bajás en ' + escapeHtml(transferName) + ' · llegás ~' + fmtClockTime(c.transferArrival) + '</div>' +
+        '<div class="arrival-sub">Subís línea ' + escapeHtml(c.leg2Route) + ' · ' + escapeHtml(c.leg2Headsign) + ' · sale ~' + fmtClockTime(c.transferBoard) + '</div>' +
+        '<div class="arrival-eta">Bajás cerca de ' + escapeHtml(c.destStop.address || c.destStop.name) + ' · llegás ~' + fmtClockTime(c.destTime) + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderTransitContent(originResults, destStops, directCandidates, twoLegCandidates) {
     var el = document.getElementById('transitContent');
     if (!el) return;
-    if (candidates.length) {
-      el.innerHTML = '<div class="section-title">Mejores opciones</div><div class="transit-result">' + candidatesHtml(candidates) + '</div>';
+    if (directCandidates.length) {
+      el.innerHTML = '<div class="section-title">Mejores opciones</div><div class="transit-result">' + candidatesHtml(directCandidates) + '</div>';
+      return;
+    }
+    if (twoLegCandidates.length) {
+      el.innerHTML = '<div class="section-title">Combinaciones con transbordo</div><div class="transit-result">' + twoLegCandidatesHtml(twoLegCandidates) + '</div>';
       return;
     }
     var nearestOrigin = originResults[0], nearestDest = destStops[0];
     var html = '<div class="section-title">Te subís acá</div>' +
       (nearestOrigin ? stopLocationHtml(nearestOrigin.stop) + arrivalsHtml(nearestOrigin.arrivals, {}) : '<p style="font-size:13px;color:var(--muted);">No se encontraron paradas cercanas.</p>') +
-      '<p style="font-size:11.5px;color:var(--muted);margin-top:8px;">Ninguno de los colectivos de las paradas cercanas pasa, más adelante en su recorrido, por alguna parada cerca de la casa — puede que haga falta combinar, o que no haya línea directa. Fijate en "Ver ruta completa en Google Maps".</p>' +
+      '<p style="font-size:11.5px;color:var(--muted);margin-top:8px;">No encontramos ni una línea directa ni una combinación con transbordo entre las paradas cercanas — probá con "Ver ruta completa en Google Maps".</p>' +
       '<div class="section-title">Te bajás cerca de la casa</div>' +
       (nearestDest ? stopLocationHtml(nearestDest) : '<p style="font-size:13px;color:var(--muted);">No se encontró una parada cercana.</p>');
     el.innerHTML = html;
@@ -1799,8 +1924,22 @@
         destStopsPromise
       ]).then(function(results) {
         var originResults = results[0], destStops = results[1];
-        return findCandidates(originResults, destStops, 5).then(function(candidates) {
-          renderTransitContent(originResults, destStops, candidates);
+        return findCandidates(originResults, destStops, 5).then(function(directCandidates) {
+          if (directCandidates.length) {
+            renderTransitContent(originResults, destStops, directCandidates, []);
+            return;
+          }
+          var elLoading = document.getElementById('transitContent');
+          if (elLoading) elLoading.innerHTML = '<p class="transit-loading">No hay línea directa, buscando combinaciones con transbordo...</p>';
+          return buildStopArrivals(destStops).then(function(destResults) {
+            return Promise.all([
+              buildReachableMap(originResults, 15),
+              buildCoverageMap(destResults, destStops, 15)
+            ]).then(function(maps) {
+              var twoLeg = findTwoLegCandidates(maps[0], maps[1], 5);
+              renderTransitContent(originResults, destStops, [], twoLeg);
+            });
+          });
         });
       });
     }).catch(function(err) {
