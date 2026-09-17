@@ -1,45 +1,129 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-palette="terracota">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Agenda de Limpieza</title>
+<title>LimpiArte</title>
+<script>
+(function(){
+  try {
+    var p = localStorage.getItem('limpiarte_palette_v1');
+    if (p) document.documentElement.setAttribute('data-palette', p);
+  } catch (e) {}
+})();
+</script>
 <style>
   :root {
-    --bg: #f4f5f7;
-    --surface: #ffffff;
-    --surface-2: #f0f1f4;
-    --text: #1c1e21;
-    --muted: #6b7280;
-    --border: #e3e5e9;
-    --primary: #2f6fed;
-    --primary-dark: #1d54c4;
-    --success: #1f9d55;
-    --success-bg: #e5f7ea;
-    --warning: #b7791f;
-    --warning-bg: #fdf3dd;
-    --danger: #d92d20;
-    --danger-bg: #fde8e6;
     --radius: 14px;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+
+  /* Terracota */
+  :root[data-palette="terracota"] {
+    --bg: #faf3ea;
+    --surface: #ffffff;
+    --surface-2: #f3e7d8;
+    --text: #3a2b22;
+    --muted: #8a7360;
+    --border: #e8d8c3;
+    --primary: #c1673b;
+    --primary-dark: #a34f28;
+    --success: #6b8f4e;
+    --success-bg: #e8f0dd;
+    --warning: #c98a2c;
+    --warning-bg: #fbeed7;
+    --danger: #c1453a;
+    --danger-bg: #f8e1de;
+  }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #16181c;
-      --surface: #212328;
-      --surface-2: #2a2d33;
-      --text: #eceef1;
-      --muted: #9aa0aa;
-      --border: #33363c;
-      --primary: #5b8cff;
-      --primary-dark: #3f6de0;
-      --success: #34c471;
-      --success-bg: #113322;
-      --warning: #e0ac48;
-      --warning-bg: #3a2c0c;
-      --danger: #f16a5e;
-      --danger-bg: #3a1613;
+    :root[data-palette="terracota"] {
+      --bg: #211a15;
+      --surface: #2c2119;
+      --surface-2: #382a1f;
+      --text: #f1e4d6;
+      --muted: #b6a08a;
+      --border: #4a392c;
+      --primary: #e08a5b;
+      --primary-dark: #c1673b;
+      --success: #8fb96b;
+      --success-bg: #2c3a22;
+      --warning: #e0aa53;
+      --warning-bg: #3e2f14;
+      --danger: #e0776a;
+      --danger-bg: #3e211d;
+    }
+  }
+
+  /* Salvia */
+  :root[data-palette="salvia"] {
+    --bg: #f4f6f1;
+    --surface: #ffffff;
+    --surface-2: #e9efe2;
+    --text: #2b332a;
+    --muted: #71806c;
+    --border: #dbe4d3;
+    --primary: #6f8f5c;
+    --primary-dark: #556e46;
+    --success: #4f8f5e;
+    --success-bg: #e2f0e2;
+    --warning: #b98a3a;
+    --warning-bg: #f6ecd8;
+    --danger: #b85c4d;
+    --danger-bg: #f6e2dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root[data-palette="salvia"] {
+      --bg: #171c15;
+      --surface: #212820;
+      --surface-2: #2a3327;
+      --text: #e6ede1;
+      --muted: #a2b099;
+      --border: #3a4535;
+      --primary: #93b97e;
+      --primary-dark: #6f8f5c;
+      --success: #7cbf87;
+      --success-bg: #223829;
+      --warning: #d4a75d;
+      --warning-bg: #3e3018;
+      --danger: #d68a78;
+      --danger-bg: #3e2622;
+    }
+  }
+
+  /* Lavanda */
+  :root[data-palette="lavanda"] {
+    --bg: #f6f3f8;
+    --surface: #ffffff;
+    --surface-2: #ece5f1;
+    --text: #322b3a;
+    --muted: #7d7189;
+    --border: #ddd2e6;
+    --primary: #8067a8;
+    --primary-dark: #6a5290;
+    --success: #5a9470;
+    --success-bg: #e2f0e7;
+    --warning: #bd8a3f;
+    --warning-bg: #f6edd9;
+    --danger: #b3576b;
+    --danger-bg: #f5e0e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root[data-palette="lavanda"] {
+      --bg: #1c1721;
+      --surface: #26202c;
+      --surface-2: #322a3a;
+      --text: #ece6f0;
+      --muted: #ab9fb8;
+      --border: #453a4f;
+      --primary: #ab8ed4;
+      --primary-dark: #8067a8;
+      --success: #7fbf96;
+      --success-bg: #223a2c;
+      --warning: #d9ac60;
+      --warning-bg: #3e2f16;
+      --danger: #d98297;
+      --danger-bg: #3e2028;
     }
   }
   * { box-sizing: border-box; }
@@ -65,11 +149,34 @@
     position: sticky;
     top: 0;
     z-index: 20;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
   }
+  header.app-header .header-text { min-width: 0; }
   header.app-header h1 {
     margin: 0;
     font-size: 19px;
     font-weight: 700;
+  }
+  .theme-switch {
+    display: flex;
+    gap: 7px;
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+  .theme-switch button {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--border);
+    padding: 0;
+    cursor: pointer;
+  }
+  .theme-switch button.active {
+    box-shadow: 0 0 0 2px var(--text);
   }
   header.app-header .sub {
     margin: 2px 0 0;
@@ -509,8 +616,11 @@
 <body>
 
 <header class="app-header">
-  <h1>Agenda de Limpieza</h1>
-  <p class="sub" id="headerSub">Tu semana de trabajo</p>
+  <div class="header-text">
+    <h1>LimpiArte</h1>
+    <p class="sub" id="headerSub">Tu semana de trabajo</p>
+  </div>
+  <div class="theme-switch" id="themeSwitch"></div>
 </header>
 
 <div id="nextBanner"></div>
@@ -552,7 +662,32 @@
 
   var DB_KEY = 'limpiarte_agenda_v1';
   var NOTIF_KEY = 'limpiarte_notified_v1';
+  var PALETTE_KEY = 'limpiarte_palette_v1';
   var OBA_BASE = 'https://mendotran.oba.visionblo.com/oba_api/api/where/';
+
+  var PALETTES = [
+    { id: 'terracota', label: 'Terracota', swatch: '#c1673b' },
+    { id: 'salvia', label: 'Salvia', swatch: '#6f8f5c' },
+    { id: 'lavanda', label: 'Lavanda', swatch: '#8067a8' }
+  ];
+  function getPalette() {
+    try { return localStorage.getItem(PALETTE_KEY) || 'terracota'; } catch (e) { return 'terracota'; }
+  }
+  function setPalette(id) {
+    document.documentElement.setAttribute('data-palette', id);
+    try { localStorage.setItem(PALETTE_KEY, id); } catch (e) {}
+    renderThemeSwitch();
+  }
+  function renderThemeSwitch() {
+    var current = getPalette();
+    var el = document.getElementById('themeSwitch');
+    el.innerHTML = PALETTES.map(function(p) {
+      return '<button class="' + (p.id === current ? 'active' : '') + '" style="background:' + p.swatch + '" data-palette="' + p.id + '" aria-label="Paleta ' + p.label + '" title="' + p.label + '"></button>';
+    }).join('');
+    el.querySelectorAll('button').forEach(function(btn) {
+      btn.addEventListener('click', function() { setPalette(btn.getAttribute('data-palette')); });
+    });
+  }
 
   var WEEKDAYS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
   var MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -1335,6 +1470,7 @@
 
   // ---------- Init ----------
   function init() {
+    renderThemeSwitch();
     renderAll();
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       setTimeout(function() {
