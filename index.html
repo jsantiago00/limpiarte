@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Agenda de Limpieza</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #f0f1f4;
+    --text: #1c1e21;
+    --muted: #6b7280;
+    --border: #e3e5e9;
+    --primary: #2f6fed;
+    --primary-dark: #1d54c4;
+    --success: #1f9d55;
+    --success-bg: #e5f7ea;
+    --warning: #b7791f;
+    --warning-bg: #fdf3dd;
+    --danger: #d92d20;
+    --danger-bg: #fde8e6;
+    --radius: 14px;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16181c;
+      --surface: #212328;
+      --surface-2: #2a2d33;
+      --text: #eceef1;
+      --muted: #9aa0aa;
+      --border: #33363c;
+      --primary: #5b8cff;
+      --primary-dark: #3f6de0;
+      --success: #34c471;
+      --success-bg: #113322;
+      --warning: #e0ac48;
+      --warning-bg: #3a2c0c;
+      --danger: #f16a5e;
+      --danger-bg: #3a1613;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding-bottom: 90px;
+  }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+  button { font-family: inherit; }
+  input, select, textarea { font-family: inherit; font-size: 16px; }
+  button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  body { overscroll-behavior-y: contain; -webkit-text-size-adjust: 100%; }
+
+  header.app-header {
+    background: var(--surface);
+    padding: 14px 16px calc(10px + env(safe-area-inset-top, 0px));
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  header.app-header h1 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 700;
+  }
+  header.app-header .sub {
+    margin: 2px 0 0;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .next-banner {
+    margin: 12px 16px 0;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: #fff;
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .next-banner .label {
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.85;
+    margin: 0 0 4px;
+  }
+  .next-banner .title {
+    font-size: 17px;
+    font-weight: 700;
+    margin: 0 0 2px;
+  }
+  .next-banner .meta {
+    font-size: 13.5px;
+    opacity: 0.92;
+    margin: 0 0 10px;
+  }
+  .next-banner .actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .next-banner .actions a, .next-banner .actions button {
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.35);
+    color: #fff;
+    border-radius: 999px;
+    padding: 7px 13px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .next-banner.empty {
+    background: var(--surface-2);
+    color: var(--muted);
+    border: 1px dashed var(--border);
+  }
+  .next-banner.empty .title { color: var(--text); }
+
+  nav.tabs {
+    display: flex;
+    gap: 6px;
+    margin: 14px 16px 4px;
+    background: var(--surface-2);
+    padding: 4px;
+    border-radius: 999px;
+  }
+  nav.tabs button {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 9px 6px;
+    border-radius: 999px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  nav.tabs button.active {
+    background: var(--surface);
+    color: var(--primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  main { padding: 12px 16px 24px; max-width: 720px; margin: 0 auto; }
+
+  .week-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 6px 0 12px;
+  }
+  .week-nav .week-label { font-size: 14.5px; font-weight: 600; text-align: center; flex: 1; }
+  .week-nav button {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  .today-btn {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--primary);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-left: 6px;
+  }
+
+  .day-card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .day-card .day-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .day-card .day-head .name {
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .day-card .day-head .name .badge-today {
+    background: var(--primary);
+    color: #fff;
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    margin-left: 6px;
+    font-weight: 700;
+  }
+  .day-card .day-head .add-btn {
+    border: none;
+    background: var(--surface-2);
+    color: var(--primary);
+    width: 32px; height: 32px;
+    border-radius: 9px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .day-card .day-body { padding: 6px 8px; }
+  .day-empty {
+    color: var(--muted);
+    font-size: 12.5px;
+    padding: 10px 8px;
+  }
+
+  .shift-block {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 9px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+    border-left: 4px solid var(--primary);
+    background: var(--surface-2);
+    margin: 4px 0;
+  }
+  .shift-block.status-completed { border-left-color: var(--success); }
+  .shift-block.status-cancelled { border-left-color: var(--muted); opacity: 0.6; }
+  .shift-block .time {
+    font-weight: 700;
+    font-size: 13.5px;
+    min-width: 46px;
+  }
+  .shift-block .info { flex: 1; min-width: 0; }
+  .shift-block .home-name {
+    font-weight: 600;
+    font-size: 13.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .shift-block.status-cancelled .home-name { text-decoration: line-through; }
+  .shift-block .sub {
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .pay-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .pay-dot.pendiente { background: var(--danger); }
+  .pay-dot.parcial { background: var(--warning); }
+  .pay-dot.pagado { background: var(--success); }
+  .pay-dot.na { background: var(--border); }
+
+  .home-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+  .home-card .name { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+  .home-card .addr { font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+  .home-card .row { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); }
+  .home-card .rate { font-weight: 700; color: var(--text); }
+
+  .debt-group { margin-bottom: 16px; }
+  .debt-group h3 {
+    font-size: 14px;
+    margin: 0 0 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .debt-group h3 .amount { color: var(--danger); }
+  .debt-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    gap: 10px;
+  }
+  .debt-item .d-info { min-width: 0; }
+  .debt-item .d-date { font-size: 12px; color: var(--muted); }
+  .debt-item .d-amt { font-weight: 700; font-size: 14px; color: var(--danger); white-space: nowrap; }
+  .debt-item button {
+    border: none;
+    background: var(--primary);
+    color: #fff;
+    padding: 7px 11px;
+    border-radius: 9px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .empty-state {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 16px;
+    font-size: 13.5px;
+  }
+  .grand-total {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-weight: 700;
+    font-size: 15px;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .fab {
+    position: fixed;
+    right: 18px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    font-size: 26px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    cursor: pointer;
+    z-index: 30;
+  }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 50;
+    display: flex;
+    align-items: flex-end;
+  }
+  .sheet {
+    background: var(--surface);
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    max-height: 92vh;
+    overflow-y: auto;
+    border-radius: 20px 20px 0 0;
+    padding: 16px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+  .sheet h2 { font-size: 17px; margin: 0 0 12px; }
+  .sheet .close-x {
+    position: absolute;
+    top: 10px; right: 14px;
+    border: none;
+    background: var(--surface-2);
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    font-size: 15px;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .sheet-wrap { position: relative; }
+
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .field input[type=text], .field input[type=tel], .field input[type=number],
+  .field input[type=date], .field input[type=time], .field select, .field textarea {
+    width: 100%;
+    padding: 10px 11px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-2);
+    color: var(--text);
+  }
+  .field textarea { min-height: 60px; resize: vertical; }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; }
+  .check-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .check-row input { width: 18px; height: 18px; }
+  .check-row label { font-size: 13.5px; font-weight: 600; }
+
+  .pill-group { display: flex; gap: 6px; margin-bottom: 12px; }
+  .pill-group button {
+    flex: 1;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--muted);
+    padding: 8px 4px;
+    border-radius: 10px;
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .pill-group button.active[data-status=scheduled] { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .pill-group button.active[data-status=completed] { background: var(--success); border-color: var(--success); color: #fff; }
+  .pill-group button.active[data-status=cancelled] { background: var(--muted); border-color: var(--muted); color: #fff; }
+
+  .btn-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .btn {
+    flex: 1;
+    border: none;
+    padding: 12px 10px;
+    border-radius: 11px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    min-width: 100px;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-secondary { background: var(--surface-2); color: var(--text); }
+  .btn-danger { background: var(--danger-bg); color: var(--danger); }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-sm { padding: 8px 10px; font-size: 12.5px; flex: none; }
+
+  .section-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 18px 0 8px;
+  }
+  .pay-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .pay-list-item .del {
+    border: none;
+    background: transparent;
+    color: var(--danger);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .due-summary {
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+  .due-summary .row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+  .due-summary .row.total { font-weight: 700; border-top: 1px solid var(--border); padding-top: 4px; margin-top: 4px; }
+
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-item .muted { color: var(--muted); }
+
+  .transit-result {
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+  .transit-result .arrival { display: flex; justify-content: space-between; padding: 4px 0; }
+  .transit-result .arrival + .arrival { border-top: 1px solid var(--border); }
+  .transit-loading { color: var(--muted); font-size: 12.5px; }
+
+  .link-btn { color: var(--primary); text-decoration: none; font-weight: 700; font-size: 13px; }
+  .toast {
+    position: fixed;
+    bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text);
+    color: var(--bg);
+    padding: 10px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    z-index: 80;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Agenda de Limpieza</h1>
+  <p class="sub" id="headerSub">Tu semana de trabajo</p>
+</header>
+
+<div id="nextBanner"></div>
+
+<nav class="tabs">
+  <button data-view="agenda" class="active">Agenda</button>
+  <button data-view="hogares">Hogares</button>
+  <button data-view="deudas">Deudas</button>
+</nav>
+
+<main>
+  <section id="view-agenda">
+    <div class="week-nav">
+      <button id="prevWeek">‹</button>
+      <div class="week-label" id="weekLabel"></div>
+      <button id="nextWeek">›</button>
+      <button class="today-btn" id="goToday">Hoy</button>
+    </div>
+    <div id="agendaDays"></div>
+  </section>
+
+  <section id="view-hogares" hidden>
+    <div id="homesList"></div>
+  </section>
+
+  <section id="view-deudas" hidden>
+    <div id="debtsList"></div>
+  </section>
+</main>
+
+<button class="fab" id="fabBtn">+</button>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var DB_KEY = 'limpiarte_agenda_v1';
+  var NOTIF_KEY = 'limpiarte_notified_v1';
+  var OBA_BASE = 'https://mendotran.oba.visionblo.com/oba_api/api/where/';
+
+  var WEEKDAYS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+  var MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 9); }
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function toDateStr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function fromDateStr(s) { var p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); }
+  function startOfWeek(d) {
+    var date = new Date(d);
+    var day = (date.getDay() + 6) % 7;
+    date.setDate(date.getDate() - day);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+  function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function addMonths(d, n) { var r = new Date(d); r.setMonth(r.getMonth() + n); return r; }
+  function fmtDisplayDate(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; }
+  function fmtMoney(n) {
+    n = Number(n) || 0;
+    return '$' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 });
+  }
+  function todayStr() { return toDateStr(new Date()); }
+  function isToday(dateStr) { return dateStr === todayStr(); }
+
+  function waUrl(phone) {
+    var digits = (phone || '').replace(/\D/g, '');
+    return 'https://wa.me/' + digits;
+  }
+  function mapsUrl(home) {
+    if (home.lat && home.lon) {
+      return 'https://www.google.com/maps/dir/?api=1&destination=' + home.lat + ',' + home.lon + '&travelmode=transit';
+    }
+    return 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(home.address || '') + '&travelmode=transit';
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ---------- DB ----------
+  function loadDB() {
+    try {
+      var raw = localStorage.getItem(DB_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return { version: 1, homes: [], shifts: [], payments: [] };
+  }
+  var db = loadDB();
+  function save() { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+
+  function getHome(id) { return db.homes.find(function(h) { return h.id === id; }); }
+  function getShift(id) { return db.shifts.find(function(s) { return s.id === id; }); }
+  function shiftsForHome(id) { return db.shifts.filter(function(s) { return s.homeId === id; }); }
+  function paymentsForShift(id) { return db.payments.filter(function(p) { return p.shiftId === id; }); }
+  function paymentsForHome(id) { return db.payments.filter(function(p) { return p.homeId === id; }); }
+  function unassignedPaymentsForHome(id) { return db.payments.filter(function(p) { return p.homeId === id && !p.shiftId; }); }
+
+  function shiftPaid(shift) {
+    return paymentsForShift(shift.id).reduce(function(sum, p) { return sum + Number(p.amount); }, 0);
+  }
+  function shiftPayStatus(shift) {
+    var due = Number(shift.amountDue) || 0;
+    if (due <= 0) return 'na';
+    var paid = shiftPaid(shift);
+    if (paid <= 0) return 'pendiente';
+    if (paid < due) return 'parcial';
+    return 'pagado';
+  }
+  function shiftRemaining(shift) {
+    var due = Number(shift.amountDue) || 0;
+    var paid = shiftPaid(shift);
+    return Math.max(0, due - paid);
+  }
+  function homeTotalDebt(homeId) {
+    var shifts = shiftsForHome(homeId).filter(function(s) { return s.status !== 'cancelled'; });
+    var raw = shifts.reduce(function(sum, s) { return sum + shiftRemaining(s); }, 0);
+    var unassigned = unassignedPaymentsForHome(homeId).reduce(function(sum, p) { return sum + Number(p.amount); }, 0);
+    return Math.max(0, raw - unassigned);
+  }
+
+  function nextUpcomingShift() {
+    var now = Date.now();
+    var upcoming = db.shifts.filter(function(s) {
+      if (s.status !== 'scheduled') return false;
+      var dt = new Date(s.date + 'T' + (s.startTime || '00:00')).getTime();
+      return dt >= now - 15 * 60000; // include one already started within 15min
+    });
+    upcoming.sort(function(a, b) {
+      var da = new Date(a.date + 'T' + (a.startTime || '00:00')).getTime();
+      var db_ = new Date(b.date + 'T' + (b.startTime || '00:00')).getTime();
+      return da - db_;
+    });
+    return upcoming[0] || null;
+  }
+
+  // ---------- Toast ----------
+  function toast(msg) {
+    var el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.getElementById('toastRoot').appendChild(el);
+    setTimeout(function() { el.remove(); }, 2200);
+  }
+
+  // ---------- View state ----------
+  var state = {
+    view: 'agenda',
+    weekStart: startOfWeek(new Date())
+  };
+
+  // ---------- Render: header banner ----------
+  function renderNextBanner() {
+    var root = document.getElementById('nextBanner');
+    var shift = nextUpcomingShift();
+    if (!shift) {
+      root.innerHTML = '<div class="next-banner empty"><p class="label">Próxima casa</p><p class="title">No hay turnos programados</p></div>';
+      return;
+    }
+    var home = getHome(shift.homeId);
+    var dateLabel = isToday(shift.date) ? 'Hoy' : fmtDisplayDate(fromDateStr(shift.date));
+    root.innerHTML =
+      '<div class="next-banner">' +
+        '<p class="label">Próxima casa</p>' +
+        '<p class="title">' + escapeHtml(home ? home.name : '(hogar eliminado)') + '</p>' +
+        '<p class="meta">' + dateLabel + ' · ' + (shift.startTime || '') + (home && home.address ? ' · ' + escapeHtml(home.address) : '') + '</p>' +
+        '<div class="actions">' +
+          (home && home.phone ? '<a href="' + waUrl(home.phone) + '" target="_blank" rel="noopener">WhatsApp</a>' : '') +
+          (home ? '<a href="' + mapsUrl(home) + '" target="_blank" rel="noopener">Cómo llego</a>' : '') +
+          (home && home.stopId ? '<button data-arrivals="' + home.id + '">Colectivo</button>' : '') +
+        '</div>' +
+      '</div>';
+    var arrBtn = root.querySelector('[data-arrivals]');
+    if (arrBtn) arrBtn.addEventListener('click', function() { openTransitSheet(home); });
+  }
+
+  // ---------- Render: agenda ----------
+  function weekLabel() {
+    var start = state.weekStart, end = addDays(start, 6);
+    return fmtDisplayDate(start) + ' – ' + fmtDisplayDate(end);
+  }
+
+  function renderAgenda() {
+    document.getElementById('weekLabel').textContent = weekLabel();
+    var container = document.getElementById('agendaDays');
+    var html = '';
+    for (var i = 0; i < 7; i++) {
+      var d = addDays(state.weekStart, i);
+      var dateStr = toDateStr(d);
+      var dayShifts = db.shifts.filter(function(s) { return s.date === dateStr; })
+        .sort(function(a, b) { return (a.startTime || '').localeCompare(b.startTime || ''); });
+      html += '<div class="day-card">' +
+        '<div class="day-head">' +
+          '<span class="name">' + WEEKDAYS[i] + ' ' + fmtDisplayDate(d) + (isToday(dateStr) ? '<span class="badge-today">HOY</span>' : '') + '</span>' +
+          '<button class="add-btn" data-add-date="' + dateStr + '">+</button>' +
+        '</div>' +
+        '<div class="day-body">';
+      if (dayShifts.length === 0) {
+        html += '<div class="day-empty">Sin turnos</div>';
+      } else {
+        dayShifts.forEach(function(s) {
+          var home = getHome(s.homeId);
+          var payStatus = shiftPayStatus(s);
+          html += '<div class="shift-block status-' + s.status + '" data-shift="' + s.id + '">' +
+            '<span class="time">' + (s.startTime || '--:--') + '</span>' +
+            '<span class="pay-dot ' + payStatus + '"></span>' +
+            '<div class="info">' +
+              '<div class="home-name">' + escapeHtml(home ? home.name : '(hogar eliminado)') + '</div>' +
+              '<div class="sub">' + (s.status === 'completed' ? 'Completado' : s.status === 'cancelled' ? 'Cancelado' : 'Programado') + (home && home.address ? ' · ' + escapeHtml(home.address) : '') + '</div>' +
+            '</div>' +
+          '</div>';
+        });
+      }
+      html += '</div></div>';
+    }
+    container.innerHTML = html;
+    container.querySelectorAll('[data-shift]').forEach(function(el) {
+      el.addEventListener('click', function() { openTurnoModal(getShift(el.getAttribute('data-shift'))); });
+    });
+    container.querySelectorAll('[data-add-date]').forEach(function(el) {
+      el.addEventListener('click', function() { openTurnoModal(null, el.getAttribute('data-add-date')); });
+    });
+  }
+
+  // ---------- Render: hogares ----------
+  function renderHogares() {
+    var container = document.getElementById('homesList');
+    if (db.homes.length === 0) {
+      container.innerHTML = '<div class="empty-state">Todavía no cargaste ningún hogar.<br>Tocá el botón + para agregar el primero.</div>';
+      return;
+    }
+    var html = '';
+    db.homes.forEach(function(h) {
+      var upcoming = shiftsForHome(h.id).filter(function(s) { return s.status === 'scheduled'; })
+        .sort(function(a, b) { return (a.date + a.startTime).localeCompare(b.date + b.startTime); })[0];
+      var debt = homeTotalDebt(h.id);
+      html += '<div class="home-card" data-home="' + h.id + '">' +
+        '<div class="name">' + escapeHtml(h.name) + '</div>' +
+        '<div class="addr">' + escapeHtml(h.address || 'Sin dirección') + '</div>' +
+        '<div class="row">' +
+          '<span class="rate">' + fmtMoney(h.rate) + '</span>' +
+          '<span>' + (upcoming ? 'Próx: ' + fmtDisplayDate(fromDateStr(upcoming.date)) + ' ' + upcoming.startTime : 'Sin próximo turno') + '</span>' +
+        '</div>' +
+        (debt > 0 ? '<div class="row" style="margin-top:4px;color:var(--danger);font-weight:700;">Debe ' + fmtMoney(debt) + '</div>' : '') +
+      '</div>';
+    });
+    container.innerHTML = html;
+    container.querySelectorAll('[data-home]').forEach(function(el) {
+      el.addEventListener('click', function() { openHogarModal(getHome(el.getAttribute('data-home'))); });
+    });
+  }
+
+  // ---------- Render: deudas ----------
+  function renderDeudas() {
+    var container = document.getElementById('debtsList');
+    var grandTotal = 0;
+    var groups = [];
+    db.homes.forEach(function(h) {
+      var owedShifts = shiftsForHome(h.id).filter(function(s) {
+        return s.status !== 'cancelled' && shiftRemaining(s) > 0;
+      }).sort(function(a, b) { return (a.date + a.startTime).localeCompare(b.date + b.startTime); });
+      var unassigned = unassignedPaymentsForHome(h.id).reduce(function(sum, p) { return sum + Number(p.amount); }, 0);
+      var total = homeTotalDebt(h.id);
+      if (owedShifts.length > 0 && total > 0) {
+        groups.push({ home: h, shifts: owedShifts, total: total, unassigned: unassigned });
+        grandTotal += total;
+      }
+    });
+    if (groups.length === 0) {
+      container.innerHTML = '<div class="empty-state">No hay deudas pendientes. 🎉</div>';
+      return;
+    }
+    var html = '<div class="grand-total"><span>Total adeudado</span><span>' + fmtMoney(grandTotal) + '</span></div>';
+    groups.forEach(function(g) {
+      html += '<div class="debt-group"><h3><span>' + escapeHtml(g.home.name) + '</span><span class="amount">' + fmtMoney(g.total) + '</span></h3>';
+      var remainingToOffset = g.unassigned;
+      g.shifts.forEach(function(s) {
+        var rem = shiftRemaining(s);
+        var display = rem;
+        if (remainingToOffset > 0) {
+          var applied = Math.min(remainingToOffset, rem);
+          display = rem - applied;
+          remainingToOffset -= applied;
+        }
+        html += '<div class="debt-item" data-shift="' + s.id + '">' +
+          '<div class="d-info"><div>' + fmtDisplayDate(fromDateStr(s.date)) + ' · ' + (s.startTime || '') + '</div>' +
+          '<div class="d-date">Debe de ' + fmtMoney(s.amountDue) + (shiftPaid(s) > 0 ? ' (pagó ' + fmtMoney(shiftPaid(s)) + ')' : '') + '</div></div>' +
+          '<div class="d-amt">' + fmtMoney(display) + '</div>' +
+          '<button data-pay="' + s.id + '">Registrar pago</button>' +
+        '</div>';
+      });
+      html += '</div>';
+    });
+    container.innerHTML = html;
+    container.querySelectorAll('[data-pay]').forEach(function(el) {
+      el.addEventListener('click', function(ev) {
+        ev.stopPropagation();
+        openPagoModal({ shiftId: el.getAttribute('data-pay') });
+      });
+    });
+    container.querySelectorAll('[data-shift]').forEach(function(el) {
+      el.addEventListener('click', function() { openTurnoModal(getShift(el.getAttribute('data-shift'))); });
+    });
+  }
+
+  function renderAll() {
+    renderNextBanner();
+    renderAgenda();
+    renderHogares();
+    renderDeudas();
+  }
+
+  // ---------- Modal infra ----------
+  function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
+  function openModal(innerHtml) {
+    document.getElementById('modalRoot').innerHTML =
+      '<div class="overlay" id="ovl"><div class="sheet-wrap"><div class="sheet">' +
+        '<button class="close-x" id="closeX">✕</button>' + innerHtml +
+      '</div></div></div>';
+    document.getElementById('closeX').addEventListener('click', closeModal);
+    document.getElementById('ovl').addEventListener('click', function(e) {
+      if (e.target.id === 'ovl') closeModal();
+    });
+  }
+
+  // ---------- Turno modal ----------
+  var pendingTurnoDraft = null;
+
+  function openTurnoModal(shift, presetDate) {
+    var isEdit = !!shift;
+    var homeOptions = db.homes.map(function(h) {
+      var sel = shift && shift.homeId === h.id ? 'selected' : '';
+      return '<option value="' + h.id + '" ' + sel + '>' + escapeHtml(h.name) + '</option>';
+    }).join('');
+
+    var date = shift ? shift.date : (presetDate || todayStr());
+    var startTime = shift ? shift.startTime : '09:00';
+    var endTime = shift ? (shift.endTime || '') : '';
+    var status = shift ? shift.status : 'scheduled';
+    var amountDue = shift ? shift.amountDue : '';
+    var notes = shift ? (shift.notes || '') : '';
+
+    var html = '<h2>' + (isEdit ? 'Editar turno' : 'Nuevo turno') + '</h2>' +
+      '<div class="field">' +
+        '<label>Hogar</label>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<select id="tHome" style="flex:1;">' + (db.homes.length ? homeOptions : '<option value="">Sin hogares cargados</option>') + '</select>' +
+          '<button class="btn btn-outline btn-sm" id="tNewHome" type="button">+ Nuevo</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="field"><label>Fecha</label><input type="date" id="tDate" value="' + date + '"></div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>Hora inicio</label><input type="time" id="tStart" value="' + startTime + '"></div>' +
+        '<div class="field"><label>Hora fin (opcional)</label><input type="time" id="tEnd" value="' + endTime + '"></div>' +
+      '</div>' +
+      '<div class="field"><label>Monto a cobrar</label><input type="number" id="tAmount" value="' + amountDue + '" placeholder="0"></div>';
+
+    if (isEdit) {
+      html += '<div class="field"><label>Estado</label><div class="pill-group" id="tStatusPills">' +
+        '<button type="button" data-status="scheduled" class="' + (status === 'scheduled' ? 'active' : '') + '">Programado</button>' +
+        '<button type="button" data-status="completed" class="' + (status === 'completed' ? 'active' : '') + '">Completado</button>' +
+        '<button type="button" data-status="cancelled" class="' + (status === 'cancelled' ? 'active' : '') + '">Cancelado</button>' +
+      '</div></div>';
+    } else {
+      html += '<div class="check-row"><input type="checkbox" id="tRepeat"><label for="tRepeat">Repetir turno</label></div>' +
+        '<div id="tRepeatFields" hidden>' +
+          '<div class="field-row">' +
+            '<div class="field"><label>Frecuencia</label><select id="tFreq"><option value="weekly">Semanal</option><option value="biweekly">Quincenal</option><option value="monthly">Mensual</option></select></div>' +
+            '<div class="field"><label>Repeticiones</label><input type="number" id="tCount" value="8" min="1" max="52"></div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    html += '<div class="field"><label>Notas</label><textarea id="tNotes" placeholder="Opcional">' + escapeHtml(notes) + '</textarea></div>';
+
+    if (isEdit) {
+      var due = Number(shift.amountDue) || 0;
+      var paid = shiftPaid(shift);
+      html += '<div class="section-title">Pagos</div>' +
+        '<div class="due-summary">' +
+          '<div class="row"><span>Debe</span><span>' + fmtMoney(due) + '</span></div>' +
+          '<div class="row"><span>Pagado</span><span>' + fmtMoney(paid) + '</span></div>' +
+          '<div class="row total"><span>Resta</span><span>' + fmtMoney(Math.max(0, due - paid)) + '</span></div>' +
+        '</div>' +
+        '<div id="payList">' + renderPayList(shift.id) + '</div>' +
+        '<button class="btn btn-outline btn-sm" id="tAddPago" type="button" style="width:100%;margin-bottom:10px;">+ Agregar pago</button>';
+    }
+
+    html += '<div class="btn-row">' +
+      '<button class="btn btn-primary" id="tSave">Guardar</button>' +
+      (isEdit ? '<button class="btn btn-danger" id="tDelete">Eliminar</button>' : '') +
+    '</div>';
+
+    openModal(html);
+
+    if (!isEdit) {
+      document.getElementById('tRepeat').addEventListener('change', function(e) {
+        document.getElementById('tRepeatFields').hidden = !e.target.checked;
+      });
+    } else {
+      document.querySelectorAll('#tStatusPills button').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('#tStatusPills button').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+        });
+      });
+      document.getElementById('tAddPago').addEventListener('click', function() {
+        openPagoModal({ shiftId: shift.id, returnToShift: shift.id });
+      });
+    }
+
+    document.getElementById('tNewHome').addEventListener('click', function() {
+      pendingTurnoDraft = {
+        date: document.getElementById('tDate').value,
+        startTime: document.getElementById('tStart').value,
+        endTime: document.getElementById('tEnd').value,
+        amountDue: document.getElementById('tAmount').value,
+        notes: document.getElementById('tNotes').value,
+        editingShiftId: shift ? shift.id : null
+      };
+      openHogarModal(null, true);
+    });
+
+    document.getElementById('tSave').addEventListener('click', function() {
+      var homeId = document.getElementById('tHome').value;
+      if (!homeId) { toast('Elegí o creá un hogar primero'); return; }
+      var newDate = document.getElementById('tDate').value;
+      var newStart = document.getElementById('tStart').value;
+      var newEnd = document.getElementById('tEnd').value;
+      var newAmount = Number(document.getElementById('tAmount').value) || 0;
+      var newNotes = document.getElementById('tNotes').value;
+
+      if (isEdit) {
+        var activePill = document.querySelector('#tStatusPills button.active');
+        shift.homeId = homeId;
+        shift.date = newDate;
+        shift.startTime = newStart;
+        shift.endTime = newEnd;
+        shift.amountDue = newAmount;
+        shift.notes = newNotes;
+        shift.status = activePill ? activePill.getAttribute('data-status') : shift.status;
+        save();
+        toast('Turno actualizado');
+      } else {
+        var repeat = document.getElementById('tRepeat').checked;
+        var seriesId = repeat ? uid() : null;
+        var baseShift = {
+          id: uid(), homeId: homeId, date: newDate, startTime: newStart, endTime: newEnd,
+          amountDue: newAmount, notes: newNotes, status: 'scheduled', seriesId: seriesId
+        };
+        db.shifts.push(baseShift);
+        if (repeat) {
+          var freq = document.getElementById('tFreq').value;
+          var count = Math.max(1, Number(document.getElementById('tCount').value) || 1);
+          var cur = fromDateStr(newDate);
+          for (var i = 0; i < count; i++) {
+            cur = freq === 'weekly' ? addDays(cur, 7) : freq === 'biweekly' ? addDays(cur, 14) : addMonths(cur, 1);
+            db.shifts.push({
+              id: uid(), homeId: homeId, date: toDateStr(cur), startTime: newStart, endTime: newEnd,
+              amountDue: newAmount, notes: newNotes, status: 'scheduled', seriesId: seriesId
+            });
+          }
+        }
+        save();
+        toast('Turno creado');
+      }
+      closeModal();
+      renderAll();
+    });
+
+    if (isEdit) {
+      document.getElementById('tDelete').addEventListener('click', function() {
+        if (!confirm('¿Eliminar este turno definitivamente? Se borrarán también sus pagos.')) return;
+        db.shifts = db.shifts.filter(function(s) { return s.id !== shift.id; });
+        db.payments = db.payments.filter(function(p) { return p.shiftId !== shift.id; });
+        save();
+        closeModal();
+        renderAll();
+        toast('Turno eliminado');
+      });
+    }
+  }
+
+  function renderPayList(shiftId) {
+    var pays = paymentsForShift(shiftId);
+    if (pays.length === 0) return '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">Sin pagos registrados</div>';
+    return pays.map(function(p) {
+      return '<div class="pay-list-item"><span>' + fmtDisplayDate(fromDateStr(p.date)) + ' · ' + fmtMoney(p.amount) + '</span>' +
+        '<button class="del" data-delpay="' + p.id + '">Quitar</button></div>';
+    }).join('');
+  }
+
+  // ---------- Pago modal ----------
+  function openPagoModal(opts) {
+    var shift = opts.shiftId ? getShift(opts.shiftId) : null;
+    var home = opts.homeId ? getHome(opts.homeId) : (shift ? getHome(shift.homeId) : null);
+    var suggestedAmount = shift ? shiftRemaining(shift) : '';
+    var html = '<h2>Registrar pago</h2>' +
+      (home ? '<p style="font-size:13px;color:var(--muted);margin-top:-6px;">' + escapeHtml(home.name) + '</p>' : '') +
+      '<div class="field"><label>Monto</label><input type="number" id="pAmount" value="' + suggestedAmount + '"></div>' +
+      '<div class="field"><label>Fecha</label><input type="date" id="pDate" value="' + todayStr() + '"></div>' +
+      '<div class="field"><label>Notas</label><textarea id="pNotes" placeholder="Opcional"></textarea></div>' +
+      '<div class="btn-row"><button class="btn btn-primary" id="pSave">Guardar pago</button></div>';
+    openModal(html);
+    document.getElementById('pSave').addEventListener('click', function() {
+      var amount = Number(document.getElementById('pAmount').value) || 0;
+      if (amount <= 0) { toast('Ingresá un monto válido'); return; }
+      db.payments.push({
+        id: uid(),
+        shiftId: opts.shiftId || null,
+        homeId: home ? home.id : (opts.homeId || null),
+        amount: amount,
+        date: document.getElementById('pDate').value,
+        notes: document.getElementById('pNotes').value
+      });
+      save();
+      closeModal();
+      if (opts.returnToShift) {
+        openTurnoModal(getShift(opts.returnToShift));
+      } else if (opts.returnToHome) {
+        openHogarModal(getHome(opts.returnToHome));
+      }
+      renderAll();
+      toast('Pago registrado');
+    });
+  }
+
+  // ---------- Hogar modal ----------
+  function openHogarModal(home, quickMode) {
+    var isEdit = !!home;
+    var html = '<h2>' + (isEdit ? 'Editar hogar' : 'Nuevo hogar') + '</h2>' +
+      '<div class="field"><label>Nombre</label><input type="text" id="hName" value="' + (home ? escapeHtml(home.name) : '') + '" placeholder="Ej: Familia Pérez"></div>' +
+      '<div class="field"><label>Teléfono / WhatsApp</label><input type="tel" id="hPhone" value="' + (home ? escapeHtml(home.phone || '') : '') + '" placeholder="Ej: 2615551234"></div>' +
+      '<div class="field"><label>Dirección</label><input type="text" id="hAddress" value="' + (home ? escapeHtml(home.address || '') : '') + '" placeholder="Calle y número, ciudad"></div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>Latitud (opcional)</label><input type="text" id="hLat" value="' + (home && home.lat ? home.lat : '') + '" placeholder="-32.89"></div>' +
+        '<div class="field"><label>Longitud (opcional)</label><input type="text" id="hLon" value="' + (home && home.lon ? home.lon : '') + '" placeholder="-68.84"></div>' +
+      '</div>' +
+      '<div class="field"><label>Tarifa</label><input type="number" id="hRate" value="' + (home ? home.rate : '') + '" placeholder="0"></div>' +
+      '<div class="field"><label>Frecuencia</label><select id="hFreq">' +
+        ['none:Única vez', 'weekly:Semanal', 'biweekly:Quincenal', 'monthly:Mensual', 'custom:Otra / manual'].map(function(opt) {
+          var parts = opt.split(':');
+          var sel = home && home.frequency === parts[0] ? 'selected' : '';
+          return '<option value="' + parts[0] + '" ' + sel + '>' + parts[1] + '</option>';
+        }).join('') +
+      '</select></div>' +
+      '<div class="field"><label>Notas</label><textarea id="hNotes" placeholder="Cómo entrar, mascotas, preferencias...">' + (home ? escapeHtml(home.notes || '') : '') + '</textarea></div>';
+
+    if (isEdit) {
+      html += '<div class="section-title">Transporte</div>' +
+        '<div id="transitBox">' +
+          (home.stopId ? '<p style="font-size:12.5px;color:var(--muted);">Parada guardada: ' + escapeHtml(home.stopName || home.stopId) + '</p>' : '<p style="font-size:12.5px;color:var(--muted);">Sin parada guardada</p>') +
+        '</div>' +
+        '<div class="btn-row">' +
+          '<button class="btn btn-outline btn-sm" id="hFindStop" type="button">Buscar parada cercana</button>' +
+          '<a class="btn btn-outline btn-sm" style="text-align:center;line-height:2.2;" href="' + mapsUrl(home) + '" target="_blank" rel="noopener">Ver en Maps</a>' +
+        '</div>';
+
+      html += '<div class="section-title">Historial de turnos</div>' +
+        '<div>' + renderHomeHistory(home.id) + '</div>';
+
+      html += '<div class="section-title">Pagos</div>' +
+        '<div class="due-summary"><div class="row total"><span>Deuda total</span><span>' + fmtMoney(homeTotalDebt(home.id)) + '</span></div></div>' +
+        '<button class="btn btn-outline btn-sm" id="hAddPago" type="button" style="width:100%;margin-bottom:10px;">+ Registrar pago general</button>' +
+        '<div>' + renderHomePayHistory(home.id) + '</div>';
+    }
+
+    html += '<div class="btn-row">' +
+      '<button class="btn btn-primary" id="hSave">Guardar</button>' +
+      (isEdit ? '<button class="btn btn-danger" id="hDelete">Eliminar</button>' : '') +
+    '</div>';
+
+    openModal(html);
+
+    if (isEdit) {
+      document.getElementById('hFindStop').addEventListener('click', function() {
+        findStopForHome(home);
+      });
+      document.getElementById('hAddPago').addEventListener('click', function() {
+        openPagoModal({ homeId: home.id, returnToHome: home.id });
+      });
+    }
+
+    document.getElementById('hSave').addEventListener('click', function() {
+      var name = document.getElementById('hName').value.trim();
+      if (!name) { toast('El nombre es obligatorio'); return; }
+      var data = {
+        name: name,
+        phone: document.getElementById('hPhone').value.trim(),
+        address: document.getElementById('hAddress').value.trim(),
+        lat: document.getElementById('hLat').value ? Number(document.getElementById('hLat').value) : null,
+        lon: document.getElementById('hLon').value ? Number(document.getElementById('hLon').value) : null,
+        rate: Number(document.getElementById('hRate').value) || 0,
+        frequency: document.getElementById('hFreq').value,
+        notes: document.getElementById('hNotes').value.trim()
+      };
+      var savedHome;
+      if (isEdit) {
+        Object.assign(home, data);
+        savedHome = home;
+        toast('Hogar actualizado');
+      } else {
+        savedHome = Object.assign({ id: uid() }, data);
+        db.homes.push(savedHome);
+        toast('Hogar creado');
+      }
+      save();
+      closeModal();
+      if (quickMode && pendingTurnoDraft) {
+        var draft = pendingTurnoDraft;
+        pendingTurnoDraft = null;
+        var shiftToEdit = draft.editingShiftId ? getShift(draft.editingShiftId) : null;
+        openTurnoModal(shiftToEdit, draft.date);
+        if (!shiftToEdit) {
+          setTimeout(function() {
+            document.getElementById('tHome').value = savedHome.id;
+            document.getElementById('tDate').value = draft.date;
+            document.getElementById('tStart').value = draft.startTime;
+            document.getElementById('tEnd').value = draft.endTime;
+            document.getElementById('tAmount').value = draft.amountDue || savedHome.rate || '';
+            document.getElementById('tNotes').value = draft.notes;
+          }, 0);
+        }
+      }
+      renderAll();
+    });
+
+    if (isEdit) {
+      document.getElementById('hDelete').addEventListener('click', function() {
+        var relatedShifts = shiftsForHome(home.id).length;
+        var relatedPays = paymentsForHome(home.id).length;
+        var msg = '¿Eliminar "' + home.name + '"?';
+        if (relatedShifts || relatedPays) {
+          msg += ' Esto también eliminará ' + relatedShifts + ' turno(s) y ' + relatedPays + ' pago(s) asociados.';
+        }
+        if (!confirm(msg)) return;
+        var shiftIds = shiftsForHome(home.id).map(function(s) { return s.id; });
+        db.shifts = db.shifts.filter(function(s) { return s.homeId !== home.id; });
+        db.payments = db.payments.filter(function(p) { return p.homeId !== home.id && shiftIds.indexOf(p.shiftId) === -1; });
+        db.homes = db.homes.filter(function(h) { return h.id !== home.id; });
+        save();
+        closeModal();
+        renderAll();
+        toast('Hogar eliminado');
+      });
+    }
+  }
+
+  function renderHomeHistory(homeId) {
+    var shifts = shiftsForHome(homeId).sort(function(a, b) { return (b.date + b.startTime).localeCompare(a.date + a.startTime); });
+    if (shifts.length === 0) return '<div style="font-size:12.5px;color:var(--muted);">Sin turnos todavía</div>';
+    return shifts.slice(0, 20).map(function(s) {
+      var statusLabel = s.status === 'completed' ? 'Completado' : s.status === 'cancelled' ? 'Cancelado' : 'Programado';
+      return '<div class="history-item"><span>' + fmtDisplayDate(fromDateStr(s.date)) + ' ' + (s.startTime || '') + '</span><span class="muted">' + statusLabel + '</span></div>';
+    }).join('');
+  }
+
+  function renderHomePayHistory(homeId) {
+    var pays = paymentsForHome(homeId).sort(function(a, b) { return b.date.localeCompare(a.date); });
+    if (pays.length === 0) return '<div style="font-size:12.5px;color:var(--muted);">Sin pagos todavía</div>';
+    return pays.slice(0, 20).map(function(p) {
+      return '<div class="history-item"><span>' + fmtDisplayDate(fromDateStr(p.date)) + '</span><span>' + fmtMoney(p.amount) + '</span></div>';
+    }).join('');
+  }
+
+  // ---------- Transit (OneBusAway / Mendotran) ----------
+  function haversine(lat1, lon1, lat2, lon2) {
+    var R = 6371;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  function fetchOBA(path, params) {
+    var url = OBA_BASE + path + '?' + Object.keys(params).map(function(k) {
+      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+    }).join('&');
+    return fetch(url).then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function(json) {
+      if (json.code !== 200) throw new Error('API code ' + json.code);
+      return json.data;
+    });
+  }
+
+  function findStopForHome(home) {
+    if (!home.lat || !home.lon) { toast('Cargá latitud y longitud primero'); return; }
+    var box = document.getElementById('transitBox');
+    if (box) box.innerHTML = '<p class="transit-loading">Buscando parada cercana...</p>';
+    fetchOBA('stops-for-location.json', { lat: home.lat, lon: home.lon, latSpan: 0.006, lonSpan: 0.006 })
+      .then(function(data) {
+        var list = data.list || data.stops || [];
+        if (!list.length) throw new Error('Sin paradas cercanas');
+        var nearest = list.reduce(function(best, s) {
+          var d = haversine(home.lat, home.lon, s.lat, s.lon);
+          return (!best || d < best.d) ? { stop: s, d: d } : best;
+        }, null);
+        home.stopId = nearest.stop.id;
+        home.stopName = nearest.stop.name;
+        save();
+        if (box) box.innerHTML = '<p style="font-size:12.5px;color:var(--muted);">Parada guardada: ' + escapeHtml(nearest.stop.name) + '</p>';
+        toast('Parada guardada');
+      })
+      .catch(function(err) {
+        if (box) box.innerHTML = '<p style="font-size:12.5px;color:var(--danger);">No se pudo buscar la parada (' + escapeHtml(err.message) + '). Usá Google Maps como alternativa.</p>';
+      });
+  }
+
+  function openTransitSheet(home) {
+    var html = '<h2>Cómo llego</h2>' +
+      '<p style="font-size:13px;color:var(--muted);margin-top:-6px;">' + escapeHtml(home.name) + '</p>' +
+      '<div id="transitContent">' + (home.stopId ? '<p class="transit-loading">Buscando próximos colectivos...</p>' : '<p style="font-size:13px;color:var(--muted);">Este hogar no tiene una parada guardada todavía.</p>') + '</div>' +
+      '<div class="btn-row"><a class="btn btn-primary" style="text-align:center;line-height:2.2;text-decoration:none;" href="' + mapsUrl(home) + '" target="_blank" rel="noopener">Abrir en Google Maps</a></div>';
+    openModal(html);
+    if (home.stopId) {
+      fetchOBA('arrivals-and-departures-for-stop.json', { stopId: home.stopId })
+        .then(function(data) {
+          var arrivals = (data.entry && data.entry.arrivalsAndDepartures) || [];
+          var content = document.getElementById('transitContent');
+          if (!content) return;
+          if (!arrivals.length) {
+            content.innerHTML = '<p style="font-size:13px;color:var(--muted);">No hay llegadas previstas por ahora.</p>';
+            return;
+          }
+          var now = Date.now();
+          var rows = arrivals.slice(0, 5).map(function(a) {
+            var t = a.predictedArrivalTime || a.scheduledArrivalTime;
+            var mins = Math.round((t - now) / 60000);
+            return '<div class="arrival"><span>' + escapeHtml(a.routeShortName || a.routeId || '') + ' · ' + escapeHtml(a.tripHeadsign || '') + '</span><span>' + (mins <= 0 ? 'Ahora' : mins + ' min') + '</span></div>';
+          }).join('');
+          content.innerHTML = '<div class="transit-result">' + rows + '</div>';
+        })
+        .catch(function(err) {
+          var content = document.getElementById('transitContent');
+          if (content) content.innerHTML = '<p style="font-size:13px;color:var(--danger);">No se pudo obtener el horario del colectivo. Probá con Google Maps.</p>';
+        });
+    }
+  }
+
+  // ---------- Delegated delete-payment clicks ----------
+  document.addEventListener('click', function(e) {
+    var delBtn = e.target.closest('[data-delpay]');
+    if (delBtn) {
+      var id = delBtn.getAttribute('data-delpay');
+      db.payments = db.payments.filter(function(p) { return p.id !== id; });
+      save();
+      closeModal();
+      renderAll();
+      toast('Pago eliminado');
+    }
+  });
+
+  // ---------- Notifications ----------
+  var notifiedIds = (function() {
+    try { return new Set(JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]')); } catch (e) { return new Set(); }
+  })();
+  function saveNotified() { localStorage.setItem(NOTIF_KEY, JSON.stringify(Array.from(notifiedIds))); }
+
+  function checkNotifications() {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    var now = Date.now();
+    db.shifts.forEach(function(s) {
+      if (s.status !== 'scheduled' || !s.startTime) return;
+      var dt = new Date(s.date + 'T' + s.startTime).getTime();
+      var diffMin = (dt - now) / 60000;
+      if (diffMin > 0 && diffMin <= 30 && !notifiedIds.has(s.id)) {
+        var home = getHome(s.homeId);
+        try {
+          new Notification('Próxima casa en ' + Math.round(diffMin) + ' min', {
+            body: (home ? home.name : '') + (home && home.address ? ' · ' + home.address : '')
+          });
+        } catch (e) {}
+        notifiedIds.add(s.id);
+        saveNotified();
+      }
+    });
+  }
+  setInterval(checkNotifications, 60000);
+
+  // ---------- Nav / tabs ----------
+  function setView(view) {
+    state.view = view;
+    document.querySelectorAll('nav.tabs button').forEach(function(b) {
+      b.classList.toggle('active', b.getAttribute('data-view') === view);
+    });
+    document.getElementById('view-agenda').hidden = view !== 'agenda';
+    document.getElementById('view-hogares').hidden = view !== 'hogares';
+    document.getElementById('view-deudas').hidden = view !== 'deudas';
+  }
+  document.querySelectorAll('nav.tabs button').forEach(function(b) {
+    b.addEventListener('click', function() { setView(b.getAttribute('data-view')); });
+  });
+
+  document.getElementById('prevWeek').addEventListener('click', function() {
+    state.weekStart = addDays(state.weekStart, -7);
+    renderAgenda();
+  });
+  document.getElementById('nextWeek').addEventListener('click', function() {
+    state.weekStart = addDays(state.weekStart, 7);
+    renderAgenda();
+  });
+  document.getElementById('goToday').addEventListener('click', function() {
+    state.weekStart = startOfWeek(new Date());
+    renderAgenda();
+  });
+
+  document.getElementById('fabBtn').addEventListener('click', function() {
+    if (state.view === 'hogares') {
+      openHogarModal(null);
+    } else {
+      openTurnoModal(null, todayStr());
+    }
+  });
+
+  // ---------- Init ----------
+  function init() {
+    renderAll();
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      setTimeout(function() {
+        Notification.requestPermission().then(function() { checkNotifications(); });
+      }, 1500);
+    } else {
+      checkNotifications();
+    }
+  }
+  init();
+})();
+</script>
+</body>
+</html>
