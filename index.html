@@ -1668,20 +1668,29 @@
     }));
   }
 
-  function fetchTripStopSequence(tripId) {
+  // Cada agencia numera las paradas con su propio esquema interno de IDs, así que la
+  // misma esquina física tiene un stopId distinto según la línea/agencia que se consulte.
+  // El código de parada visible ("M5063") sí es estable entre agencias, así que cruzamos
+  // por ese código en vez del id interno de la secuencia del viaje.
+  function fetchTripDetails(tripId) {
     return fetchOBA('trip-details-for-trip/' + encodeURIComponent(tripId) + '.json', { platform: 'web', v: '', version: '1.0' })
       .then(function(data) {
-        return (data.entry && data.entry.schedule && data.entry.schedule.stopTimes) || [];
+        var stopTimes = (data.entry && data.entry.schedule && data.entry.schedule.stopTimes) || [];
+        var codeById = {};
+        ((data.references && data.references.stops) || []).forEach(function(s) {
+          codeById[s.id] = s.code || s.name;
+        });
+        return { stopTimes: stopTimes, codeById: codeById };
       })
-      .catch(function() { return []; });
+      .catch(function() { return { stopTimes: [], codeById: {} }; });
   }
 
   // Recorre la secuencia completa de paradas de cada colectivo próximo (no solo los arribos
   // ya anunciados en la parada de destino) para saber con certeza si, más adelante en su
   // recorrido, ese mismo viaje pasa por alguna parada cercana a la casa.
   function findCandidates(originResults, destStops, limit) {
-    var destById = {};
-    destStops.forEach(function(s) { destById[s.id] = s; });
+    var destByCode = {};
+    destStops.forEach(function(s) { destByCode[s.name] = s; });
 
     var seen = {};
     var flat = [];
@@ -1698,20 +1707,25 @@
     var toProbe = flat.slice(0, 15);
 
     return Promise.all(toProbe.map(function(item) {
-      return fetchTripStopSequence(item.arrival.tripId).then(function(stopTimes) {
-        return { item: item, stopTimes: stopTimes };
+      return fetchTripDetails(item.arrival.tripId).then(function(details) {
+        return { item: item, details: details };
       });
     })).then(function(results) {
       var candidates = [];
       results.forEach(function(r) {
-        var originEntry = r.stopTimes.filter(function(st) { return st.stopId === r.item.originStop.id; })[0];
+        var stopTimes = r.details.stopTimes, codeById = r.details.codeById;
+        if (!stopTimes.length) return;
+        var originEntry = null;
+        for (var i = 0; i < stopTimes.length; i++) {
+          if (codeById[stopTimes[i].stopId] === r.item.originStop.name) { originEntry = stopTimes[i]; break; }
+        }
         if (!originEntry) return;
         var destEntry = null, destStop = null;
-        for (var i = 0; i < r.stopTimes.length; i++) {
-          var s = r.stopTimes[i];
-          if (destById[s.stopId] && s.arrivalTime > originEntry.arrivalTime) {
-            destEntry = s;
-            destStop = destById[s.stopId];
+        for (var j = 0; j < stopTimes.length; j++) {
+          var code = codeById[stopTimes[j].stopId];
+          if (code && destByCode[code] && stopTimes[j].arrivalTime > originEntry.arrivalTime) {
+            destEntry = stopTimes[j];
+            destStop = destByCode[code];
             break;
           }
         }
