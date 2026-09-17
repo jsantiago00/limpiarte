@@ -1668,7 +1668,10 @@
           el.innerHTML = loc + '<p style="font-size:12.5px;color:var(--muted);">No se pudieron cargar los horarios ahora. Probá con Google Maps.</p>';
           return;
         }
-        el.innerHTML = loc + arrivalsHtml((data.entry && data.entry.arrivalsAndDepartures) || [], destIndex);
+        var arrivals = (data.entry && data.entry.arrivalsAndDepartures) || [];
+        var anyMatch = arrivals.some(function(a) { return a.tripId && destIndex[a.tripId]; });
+        var note = (!anyMatch && arrivals.length) ? '<p style="font-size:11.5px;color:var(--muted);margin-top:8px;">Ninguno de estos colectivos pasa también por la parada de destino dentro de los próximos ~65 min — puede que haga falta combinar, o que no haya línea directa. Fijate en "Ver ruta completa en Google Maps".</p>' : '';
+        el.innerHTML = loc + arrivalsHtml(arrivals, destIndex) + note;
       });
     }).catch(function(err) {
       if (el) el.innerHTML = '<p style="font-size:13px;color:var(--muted);">' + escapeHtml(err.message || 'No se pudo buscar la parada.') + '</p>';
