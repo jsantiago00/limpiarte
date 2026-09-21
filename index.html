@@ -693,6 +693,8 @@
   .pill-group button.active[data-status=completed] { background: var(--success); border-color: var(--success); color: #fff; }
   .pill-group button.active[data-status=cancelled] { background: var(--muted); border-color: var(--muted); color: #fff; }
   .pill-group button.active[data-rate-type] { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .pill-group button.active[data-day] { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .pill-group button.active[data-mode] { background: var(--primary); border-color: var(--primary); color: #fff; }
 
   .work-timer {
     background: var(--surface-2);
@@ -705,6 +707,45 @@
   .work-timer .wt-label { color: var(--muted); font-weight: 600; }
   .work-timer .wt-value { font-weight: 700; }
   .work-timer .wt-value.live { color: var(--success); }
+  .work-timer .wt-hint { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+  .agenda-mode-row { margin: 0 2px 10px; }
+  .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .mg-dow { font-size: 9px; font-weight: 800; text-transform: uppercase; text-align: center; color: var(--muted); padding-bottom: 4px; }
+  .month-cell {
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: none;
+    background: transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .month-cell.other-month { opacity: 0.35; }
+  .month-cell.today { box-shadow: inset 0 0 0 2px var(--primary); }
+  .month-cell.selected { background: var(--primary); color: #fff; box-shadow: none; }
+  .mc-dots { display: flex; gap: 2px; height: 4px; }
+  .mc-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--primary); }
+  .month-cell.selected .mc-dot { background: #fff; }
+
+  .note-btn {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px;
+    opacity: 0.55;
+  }
+  .note-btn.has-note { opacity: 1; }
 
   .btn-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .btn {
@@ -893,7 +934,10 @@
   </div>
   <div class="header-controls">
     <div class="theme-switch" id="themeSwitch"></div>
-    <button class="mode-toggle" id="modeToggle" type="button" title="Modo claro/oscuro"></button>
+    <div style="display:flex;gap:7px;">
+      <button class="mode-toggle" id="settingsToggle" type="button" title="Configuración">⚙️</button>
+      <button class="mode-toggle" id="modeToggle" type="button" title="Modo claro/oscuro"></button>
+    </div>
   </div>
 </header>
 
@@ -911,12 +955,27 @@
       <span class="week-label" id="weekLabel"></span>
       <button class="today-btn" id="goToday">Hoy</button>
     </div>
-    <div class="day-strip-row">
+    <div class="agenda-mode-row">
+      <div class="pill-group" id="agendaModeToggle" style="margin-bottom:0;">
+        <button type="button" data-mode="week" class="active">Semana</button>
+        <button type="button" data-mode="month">Mes</button>
+      </div>
+    </div>
+    <div class="day-strip-row" id="weekStripRow">
       <button class="nav-arrow" id="prevWeek" aria-label="Semana anterior">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
       <div class="day-strip" id="dayStrip"></div>
       <button class="nav-arrow" id="nextWeek" aria-label="Semana siguiente">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+    <div class="day-strip-row" id="monthNavRow" hidden>
+      <button class="nav-arrow" id="prevMonth" aria-label="Mes anterior">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div id="monthGrid" style="flex:1;"></div>
+      <button class="nav-arrow" id="nextMonth" aria-label="Mes siguiente">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
       </button>
     </div>
@@ -963,7 +1022,18 @@
   var DB_KEY = 'limpiarte_agenda_v1';
   var NOTIF_KEY = 'limpiarte_notified_v1';
   var PALETTE_KEY = 'limpiarte_palette_v1';
+  var SETTINGS_KEY = 'limpiarte_settings_v1';
   var OBA_BASE = 'https://api.santiagososa.com.ar/';
+
+  function loadSettings() {
+    try {
+      var raw = localStorage.getItem(SETTINGS_KEY);
+      if (raw) return Object.assign({ minHours: 3.5 }, JSON.parse(raw));
+    } catch (e) {}
+    return { minHours: 3.5 };
+  }
+  var settings = loadSettings();
+  function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }
 
   var PALETTES = [
     { id: 'terracota', label: 'Terracota', swatch: '#c1673b' },
@@ -1038,9 +1108,14 @@
   function todayStr() { return toDateStr(new Date()); }
   function isToday(dateStr) { return dateStr === todayStr(); }
 
-  function waUrl(phone) {
+  function waUrl(phone, text) {
     var digits = (phone || '').replace(/\D/g, '');
-    return 'https://wa.me/' + digits;
+    var url = 'https://wa.me/' + digits;
+    if (text) url += '?text=' + encodeURIComponent(text);
+    return url;
+  }
+  function contactPickerSupported() {
+    return !!(navigator.contacts && navigator.contacts.select && window.ContactsManager);
   }
   function mapsUrl(home) {
     if (home.lat && home.lon) {
@@ -1122,9 +1197,12 @@
   // ---------- View state ----------
   var state = {
     view: 'agenda',
+    agendaMode: 'week',
     weekStart: startOfWeek(new Date()),
-    selectedDate: todayStr()
+    selectedDate: todayStr(),
+    monthCursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
   };
+  var MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
   var ICON_HOME = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>';
   var ICON_CHAT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>';
@@ -1147,10 +1225,12 @@
         '<p class="title">' + escapeHtml(home ? home.name : '(hogar eliminado)') + '</p>' +
         '<p class="meta">' + dateLabel + ' · ' + (shift.startTime || '') + (home && home.address ? ' · ' + escapeHtml(home.address) : '') + '</p>' +
         '<div class="actions">' +
-          (home && home.phone ? '<a href="' + waUrl(home.phone) + '" target="_blank" rel="noopener">' + ICON_CHAT + ' WhatsApp</a>' : '') +
+          (home && home.phone ? '<button data-wa="' + home.id + '">' + ICON_CHAT + ' WhatsApp</button>' : '') +
           (home ? '<button data-howto="' + home.id + '">' + ICON_PIN + ' Cómo llego</button>' : '') +
         '</div>' +
       '</div>';
+    var waBtn = root.querySelector('[data-wa]');
+    if (waBtn) waBtn.addEventListener('click', function() { openWhatsAppPicker(home); });
     var howtoBtn = root.querySelector('[data-howto]');
     if (howtoBtn) howtoBtn.addEventListener('click', function() { openTransitSheet(home); });
   }
@@ -1161,10 +1241,43 @@
     return fmtDisplayDate(start) + ' – ' + fmtDisplayDate(end);
   }
 
+  function monthLabel() {
+    return MONTH_NAMES[state.monthCursor.getMonth()] + ' ' + state.monthCursor.getFullYear();
+  }
+
   function renderAgenda() {
-    document.getElementById('weekLabel').textContent = weekLabel();
-    renderDayStrip();
+    document.getElementById('weekLabel').textContent = state.agendaMode === 'month' ? monthLabel() : weekLabel();
+    if (state.agendaMode === 'month') {
+      renderMonthGrid();
+    } else {
+      renderDayStrip();
+    }
     renderDayDetail();
+  }
+
+  function renderMonthGrid() {
+    var grid = document.getElementById('monthGrid');
+    var firstOfMonth = new Date(state.monthCursor.getFullYear(), state.monthCursor.getMonth(), 1);
+    var gridStart = startOfWeek(firstOfMonth);
+    var html = '<div class="month-grid">';
+    WEEKDAYS.forEach(function(wd) { html += '<div class="mg-dow">' + wd.slice(0, 1) + '</div>'; });
+    for (var i = 0; i < 42; i++) {
+      var d = addDays(gridStart, i);
+      var dateStr = toDateStr(d);
+      var inMonth = d.getMonth() === state.monthCursor.getMonth();
+      var dayShifts = db.shifts.filter(function(s) { return s.date === dateStr; });
+      var classes = 'month-cell' + (inMonth ? '' : ' other-month') + (isToday(dateStr) ? ' today' : '') + (dateStr === state.selectedDate ? ' selected' : '');
+      var dots = dayShifts.slice(0, 3).map(function() { return '<span class="mc-dot"></span>'; }).join('');
+      html += '<button type="button" class="' + classes + '" data-date="' + dateStr + '"><span>' + d.getDate() + '</span><span class="mc-dots">' + dots + '</span></button>';
+    }
+    html += '</div>';
+    grid.innerHTML = html;
+    grid.querySelectorAll('[data-date]').forEach(function(el) {
+      el.addEventListener('click', function() {
+        state.selectedDate = el.getAttribute('data-date');
+        renderAgenda();
+      });
+    });
   }
 
   function renderDayStrip() {
@@ -1216,6 +1329,7 @@
             '<div class="home-name">' + escapeHtml(home ? home.name : '(hogar eliminado)') + '</div>' +
             '<div class="sub">' + (s.status === 'completed' ? 'Completado' : s.status === 'cancelled' ? 'Cancelado' : 'Programado') + (home && home.address ? ' · ' + escapeHtml(home.address) : '') + '</div>' +
           '</div>' +
+          '<button class="note-btn' + (s.notes ? ' has-note' : '') + '" type="button" data-quicknote="' + s.id + '" title="Nota rápida">📝</button>' +
         '</div>';
       });
     }
@@ -1226,8 +1340,31 @@
     container.querySelectorAll('[data-shift]').forEach(function(el) {
       el.addEventListener('click', function() { openTurnoModal(getShift(el.getAttribute('data-shift'))); });
     });
+    container.querySelectorAll('[data-quicknote]').forEach(function(el) {
+      el.addEventListener('click', function(ev) {
+        ev.stopPropagation();
+        openQuickNoteModal(getShift(el.getAttribute('data-quicknote')));
+      });
+    });
     var addBtn = document.getElementById('dayAddBtn');
     if (addBtn) addBtn.addEventListener('click', function() { openTurnoModal(null, dateStr); });
+  }
+
+  function openQuickNoteModal(shift) {
+    var home = getHome(shift.homeId);
+    var html = '<h2>Nota rápida</h2>' +
+      '<p style="font-size:13px;color:var(--muted);margin-top:-6px;">' + escapeHtml(home ? home.name : '') + ' · ' + fmtDisplayDate(fromDateStr(shift.date)) + ' ' + (shift.startTime || '') + '</p>' +
+      '<div class="field"><textarea id="qnText" placeholder="Ej: me pidieron comprar jabón">' + escapeHtml(shift.notes || '') + '</textarea></div>' +
+      '<div class="btn-row"><button class="btn btn-primary" id="qnSave">Guardar nota</button></div>';
+    openModal(html);
+    document.getElementById('qnText').focus();
+    document.getElementById('qnSave').addEventListener('click', function() {
+      shift.notes = document.getElementById('qnText').value;
+      save();
+      closeModal();
+      renderAll();
+      toast('Nota guardada');
+    });
   }
 
   // ---------- Render: hogares ----------
@@ -1335,6 +1472,24 @@
     });
   }
 
+  // ---------- Configuración ----------
+  function openSettingsModal() {
+    var html = '<h2>Configuración</h2>' +
+      '<div class="field"><label>Mínimo de horas por visita (para cobro por hora)</label>' +
+      '<input type="number" id="sMinHours" value="' + settings.minHours + '" min="0" step="0.5"></div>' +
+      '<p style="font-size:11.5px;color:var(--muted);margin-top:-6px;">Si trabajás menos de este tiempo, igual se cobra este mínimo. Ej: 3.5 = 3h 30min.</p>' +
+      '<div class="btn-row"><button class="btn btn-primary" id="sSave">Guardar</button></div>';
+    openModal(html);
+    document.getElementById('sSave').addEventListener('click', function() {
+      var v = Number(document.getElementById('sMinHours').value);
+      settings.minHours = (v >= 0) ? v : 3.5;
+      saveSettings();
+      closeModal();
+      toast('Configuración guardada');
+    });
+  }
+  document.getElementById('settingsToggle').addEventListener('click', openSettingsModal);
+
   // ---------- Turno modal ----------
   var pendingTurnoDraft = null;
 
@@ -1347,20 +1502,44 @@
     var h = Math.floor(totalMin / 60), m = totalMin % 60;
     return (h > 0 ? h + 'h ' : '') + m + 'min';
   }
+  function fmtHoursDecimal(hours) {
+    var h = Math.floor(hours), m = Math.round((hours - h) * 60);
+    if (m === 60) { h++; m = 0; }
+    return (h > 0 ? h + 'h ' : '') + (m > 0 ? m + 'min' : (h > 0 ? '' : '0min'));
+  }
+
+  // 07:00 a 19:00 en pasos de 15min, para no navegar 24 horas x 60 minutos al agendar.
+  function timeOptionsHtml(selected) {
+    var opts = [];
+    for (var h = 7; h <= 19; h++) {
+      for (var m = 0; m < 60; m += 15) {
+        if (h === 19 && m > 0) break;
+        opts.push(pad(h) + ':' + pad(m));
+      }
+    }
+    var extra = (selected && opts.indexOf(selected) === -1) ? [selected] : [];
+    return extra.concat(opts).map(function(v) {
+      return '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + v + '</option>';
+    }).join('');
+  }
 
   function renderWorkTimerContent(shift, home) {
     if (!shift.workStart) {
-      return '<button class="btn btn-primary btn-full" id="tStartWork" type="button">▶ Empecé a trabajar</button>';
+      return '<button class="btn btn-primary btn-full" id="tStartWork" type="button">▶ Empecé a trabajar</button>' +
+        '<div class="wt-hint">Si arrancás tarde, se cuenta igual desde el horario acordado (' + (shift.startTime || '--:--') + ').</div>';
     }
     if (!shift.workEnd) {
       return '<div class="wt-row"><span class="wt-label">Empezaste</span><span class="wt-value">' + fmtHM(shift.workStart) + '</span></div>' +
         '<div class="wt-row"><span class="wt-label">Llevás</span><span class="wt-value live" id="wtLive">' + fmtDuration(Date.now() - shift.workStart) + '</span></div>' +
+        '<div class="wt-hint">Mínimo por visita: ' + fmtHoursDecimal(settings.minHours) + '</div>' +
         '<button class="btn btn-primary btn-full" id="tEndWork" type="button" style="margin-top:8px;">⏹ Terminé de trabajar</button>';
     }
     var durationMs = shift.workEnd - shift.workStart;
     var hours = durationMs / 3600000;
-    var computedAmount = Math.round(hours * (home.rate || 0));
+    var billedHours = Math.max(hours, settings.minHours);
+    var computedAmount = Math.round(billedHours * (home.rate || 0));
     return '<div class="wt-row"><span class="wt-label">Trabajaste</span><span class="wt-value">' + fmtHM(shift.workStart) + ' a ' + fmtHM(shift.workEnd) + ' (' + fmtDuration(durationMs) + ')</span></div>' +
+      (billedHours > hours ? '<div class="wt-row"><span class="wt-label">Facturado</span><span class="wt-value">' + fmtHoursDecimal(billedHours) + ' (mínimo)</span></div>' : '') +
       '<div class="wt-row"><span class="wt-label">Calculado</span><span class="wt-value">' + fmtMoney(computedAmount) + '</span></div>' +
       '<button class="btn btn-outline btn-sm" id="tResetWork" type="button" style="margin-top:8px;width:100%;">Reiniciar registro</button>';
   }
@@ -1375,7 +1554,8 @@
     function bindButtons() {
       var startBtn = document.getElementById('tStartWork');
       if (startBtn) startBtn.addEventListener('click', function() {
-        shift.workStart = Date.now();
+        var scheduledDt = new Date(shift.date + 'T' + (shift.startTime || '00:00')).getTime();
+        shift.workStart = isNaN(scheduledDt) ? Date.now() : Math.min(Date.now(), scheduledDt);
         delete shift.workEnd;
         save();
         refreshBox();
@@ -1384,7 +1564,7 @@
       var endBtn = document.getElementById('tEndWork');
       if (endBtn) endBtn.addEventListener('click', function() {
         shift.workEnd = Date.now();
-        var hours = (shift.workEnd - shift.workStart) / 3600000;
+        var hours = Math.max((shift.workEnd - shift.workStart) / 3600000, settings.minHours);
         var computed = Math.round(hours * (home.rate || 0));
         shift.amountDue = computed;
         shift.status = 'completed';
@@ -1447,7 +1627,7 @@
       '</div>' +
       '<div class="field"><label>Fecha</label><input type="date" id="tDate" value="' + date + '"></div>' +
       '<div class="field-row">' +
-        '<div class="field"><label>Hora inicio</label><input type="time" id="tStart" value="' + startTime + '"></div>' +
+        '<div class="field"><label>Hora inicio</label><select id="tStart">' + timeOptionsHtml(startTime) + '</select></div>' +
         '<div class="field"><label>Hora fin (opcional)</label><input type="time" id="tEnd" value="' + endTime + '"></div>' +
       '</div>' +
       '<div class="field"><label>Monto a cobrar</label><input type="number" id="tAmount" value="' + amountDue + '" placeholder="0"></div>';
@@ -1465,12 +1645,15 @@
           '<div class="work-timer" id="workTimerBox">' + renderWorkTimerContent(shift, editHome) + '</div>';
       }
     } else {
-      html += '<div class="check-row"><input type="checkbox" id="tRepeat"><label for="tRepeat">Repetir turno</label></div>' +
+      html += '<div class="check-row"><input type="checkbox" id="tRepeat"><label for="tRepeat">Repetir todas las semanas</label></div>' +
         '<div id="tRepeatFields" hidden>' +
-          '<div class="field-row">' +
-            '<div class="field"><label>Frecuencia</label><select id="tFreq"><option value="weekly">Semanal</option><option value="biweekly">Quincenal</option><option value="monthly">Mensual</option></select></div>' +
-            '<div class="field"><label>Repeticiones</label><input type="number" id="tCount" value="8" min="1" max="52"></div>' +
+          '<div class="field"><label>¿Qué días vas? (ej: "voy todos los lunes", o "lunes y jueves")</label>' +
+            '<div class="pill-group" id="tRepeatDayPills">' +
+              WEEKDAYS.map(function(wd, i) { return '<button type="button" data-day="' + i + '">' + wd.slice(0, 2) + '</button>'; }).join('') +
+            '</div>' +
           '</div>' +
+          '<div id="tRepeatDayTimes"></div>' +
+          '<div class="field"><label>¿Durante cuántas semanas?</label><input type="number" id="tCount" value="8" min="1" max="52"></div>' +
         '</div>';
     }
 
@@ -1496,9 +1679,37 @@
 
     openModal(html);
 
+    var selectedRepeatDays = {};
+    function renderRepeatDayTimes() {
+      var box = document.getElementById('tRepeatDayTimes');
+      if (!box) return;
+      var days = Object.keys(selectedRepeatDays).map(Number).sort();
+      box.innerHTML = days.map(function(di) {
+        return '<div class="field-row"><div class="field" style="flex:none;width:88px;"><label>&nbsp;</label>' +
+          '<span style="font-size:13px;font-weight:700;">' + WEEKDAYS[di] + '</span></div>' +
+          '<div class="field"><select data-day-time="' + di + '">' + timeOptionsHtml(selectedRepeatDays[di]) + '</select></div></div>';
+      }).join('');
+      box.querySelectorAll('[data-day-time]').forEach(function(sel) {
+        sel.addEventListener('change', function() {
+          selectedRepeatDays[Number(sel.getAttribute('data-day-time'))] = sel.value;
+        });
+      });
+    }
     if (!isEdit) {
       document.getElementById('tRepeat').addEventListener('change', function(e) {
         document.getElementById('tRepeatFields').hidden = !e.target.checked;
+      });
+      document.querySelectorAll('#tRepeatDayPills button').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var di = Number(btn.getAttribute('data-day'));
+          btn.classList.toggle('active');
+          if (btn.classList.contains('active')) {
+            selectedRepeatDays[di] = document.getElementById('tStart').value || '09:00';
+          } else {
+            delete selectedRepeatDays[di];
+          }
+          renderRepeatDayTimes();
+        });
       });
     } else {
       document.querySelectorAll('#tStatusPills button').forEach(function(btn) {
@@ -1549,26 +1760,35 @@
         toast('Turno actualizado');
       } else {
         var repeat = document.getElementById('tRepeat').checked;
-        var seriesId = repeat ? uid() : null;
-        var baseShift = {
-          id: uid(), homeId: homeId, date: newDate, startTime: newStart, endTime: newEnd,
-          amountDue: newAmount, notes: newNotes, status: 'scheduled', seriesId: seriesId
-        };
-        db.shifts.push(baseShift);
         if (repeat) {
-          var freq = document.getElementById('tFreq').value;
-          var count = Math.max(1, Number(document.getElementById('tCount').value) || 1);
-          var cur = fromDateStr(newDate);
-          for (var i = 0; i < count; i++) {
-            cur = freq === 'weekly' ? addDays(cur, 7) : freq === 'biweekly' ? addDays(cur, 14) : addMonths(cur, 1);
-            db.shifts.push({
-              id: uid(), homeId: homeId, date: toDateStr(cur), startTime: newStart, endTime: newEnd,
-              amountDue: newAmount, notes: newNotes, status: 'scheduled', seriesId: seriesId
+          var dayList = Object.keys(selectedRepeatDays).map(Number);
+          if (dayList.length === 0) { toast('Elegí al menos un día para repetir'); return; }
+          var seriesId = uid();
+          var weeks = Math.max(1, Number(document.getElementById('tCount').value) || 1);
+          var weekStart0 = startOfWeek(fromDateStr(newDate));
+          var createdCount = 0;
+          for (var w = 0; w < weeks; w++) {
+            dayList.forEach(function(di) {
+              var occDate = addDays(weekStart0, w * 7 + di);
+              var occStr = toDateStr(occDate);
+              if (occStr < newDate) return;
+              db.shifts.push({
+                id: uid(), homeId: homeId, date: occStr, startTime: selectedRepeatDays[di], endTime: newEnd,
+                amountDue: newAmount, notes: newNotes, status: 'scheduled', seriesId: seriesId
+              });
+              createdCount++;
             });
           }
+          save();
+          toast(createdCount + ' turno(s) creados');
+        } else {
+          db.shifts.push({
+            id: uid(), homeId: homeId, date: newDate, startTime: newStart, endTime: newEnd,
+            amountDue: newAmount, notes: newNotes, status: 'scheduled', seriesId: null
+          });
+          save();
+          toast('Turno creado');
         }
-        save();
-        toast('Turno creado');
       }
       closeModal();
       renderAll();
@@ -1631,17 +1851,51 @@
     });
   }
 
+  // ---------- WhatsApp con mensajes predeterminados ----------
+  function openWhatsAppPicker(home) {
+    var msgs = home.messages || [];
+    if (msgs.length === 0) {
+      window.open(waUrl(home.phone), '_blank');
+      return;
+    }
+    var html = '<h2>Enviar WhatsApp</h2>' +
+      '<p style="font-size:13px;color:var(--muted);margin-top:-6px;">' + escapeHtml(home.name) + '</p>' +
+      '<div class="btn-row" style="flex-direction:column;">' +
+        msgs.map(function(m) {
+          return '<button class="btn btn-outline" data-wamsg="' + m.id + '" style="width:100%;text-align:left;">' + escapeHtml(m.label) + '</button>';
+        }).join('') +
+        '<button class="btn btn-secondary" id="waNoMsg" style="width:100%;">Sin mensaje (chat vacío)</button>' +
+      '</div>';
+    openModal(html);
+    document.querySelectorAll('[data-wamsg]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var m = msgs.find(function(x) { return x.id === btn.getAttribute('data-wamsg'); });
+        window.open(waUrl(home.phone, m ? m.text : ''), '_blank');
+        closeModal();
+      });
+    });
+    document.getElementById('waNoMsg').addEventListener('click', function() {
+      window.open(waUrl(home.phone), '_blank');
+      closeModal();
+    });
+  }
+
   // ---------- Hogar modal ----------
   function openHogarModal(home, quickMode) {
     var isEdit = !!home;
     var html = '<h2>' + (isEdit ? 'Editar hogar' : 'Nuevo hogar') + '</h2>' +
       '<div class="field"><label>Nombre</label><input type="text" id="hName" value="' + (home ? escapeHtml(home.name) : '') + '" placeholder="Ej: Familia Pérez"></div>' +
-      '<div class="field"><label>Teléfono / WhatsApp</label><input type="tel" id="hPhone" value="' + (home ? escapeHtml(home.phone || '') : '') + '" placeholder="Ej: 2615551234"></div>' +
+      '<div class="field"><label>Teléfono / WhatsApp</label>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<input type="tel" id="hPhone" style="flex:1;" value="' + (home ? escapeHtml(home.phone || '') : '') + '" placeholder="Ej: 2615551234">' +
+          (contactPickerSupported() ? '<button type="button" class="btn btn-outline btn-sm" id="hPickContact" style="flex:none;">📇</button>' : '') +
+        '</div>' +
+      '</div>' +
       '<div class="field"><label>Dirección</label><input type="text" id="hAddress" value="' + (home ? escapeHtml(home.address || '') : '') + '" placeholder="Calle y número, ciudad"></div>' +
       '<div class="field">' +
         '<label>Marcar ubicación</label>' +
         '<button type="button" class="btn btn-primary btn-sm" id="hPinMap" style="width:100%;margin-bottom:6px;">📍 Marcar en el mapa</button>' +
-        '<div class="map-status-line' + (home && home.lat && home.lon ? ' ok' : '') + '" id="hLocationStatus" style="margin-bottom:6px;">' + (home && home.lat && home.lon ? 'Ubicación guardada (' + home.lat + ', ' + home.lon + ')' : '') + '</div>' +
+        '<div class="map-status-line' + (home && home.lat && home.lon ? ' ok' : '') + '" id="hLocationStatus" style="margin-bottom:6px;">' + (home && home.lat && home.lon ? escapeHtml(home.locationLabel || 'Ubicación guardada') : '') + '</div>' +
         '<button type="button" class="link-btn" id="hToggleMapsPaste" style="background:none;border:none;font-size:11.5px;padding:0;cursor:pointer;display:block;">¿Preferís abrir Google Maps o pegar coordenadas?</button>' +
         '<div id="hMapsPasteBox" hidden style="margin-top:8px;">' +
           '<button type="button" class="btn btn-outline btn-sm" id="hOpenMaps" style="width:100%;">Abrir Google Maps</button>' +
@@ -1652,25 +1906,25 @@
           '</div>' +
         '</div>' +
       '</div>' +
-      '<div class="field-row">' +
-        '<div class="field"><label>Latitud (opcional)</label><input type="text" id="hLat" value="' + (home && home.lat ? home.lat : '') + '" placeholder="-32.89"></div>' +
-        '<div class="field"><label>Longitud (opcional)</label><input type="text" id="hLon" value="' + (home && home.lon ? home.lon : '') + '" placeholder="-68.84"></div>' +
-      '</div>' +
+      '<input type="hidden" id="hLat" value="' + (home && home.lat ? home.lat : '') + '">' +
+      '<input type="hidden" id="hLon" value="' + (home && home.lon ? home.lon : '') + '">' +
       '<div class="field"><label>Cómo cobrás</label><div class="pill-group" id="hRateTypePills">' +
         '<button type="button" data-rate-type="fixed" class="' + ((!home || home.rateType !== 'hourly') ? 'active' : '') + '">Monto fijo</button>' +
         '<button type="button" data-rate-type="hourly" class="' + (home && home.rateType === 'hourly' ? 'active' : '') + '">Por hora</button>' +
       '</div></div>' +
       '<div class="field"><label id="hRateLabel">' + (home && home.rateType === 'hourly' ? 'Tarifa por hora' : 'Tarifa') + '</label><input type="number" id="hRate" value="' + (home ? home.rate : '') + '" placeholder="0"></div>' +
-      '<div class="field"><label>Frecuencia</label><select id="hFreq">' +
-        ['none:Única vez', 'weekly:Semanal', 'biweekly:Quincenal', 'monthly:Mensual', 'custom:Otra / manual'].map(function(opt) {
-          var parts = opt.split(':');
-          var sel = home && home.frequency === parts[0] ? 'selected' : '';
-          return '<option value="' + parts[0] + '" ' + sel + '>' + parts[1] + '</option>';
-        }).join('') +
-      '</select></div>' +
       '<div class="field"><label>Notas</label><textarea id="hNotes" placeholder="Cómo entrar, mascotas, preferencias...">' + (home ? escapeHtml(home.notes || '') : '') + '</textarea></div>';
 
     if (isEdit) {
+      html += '<div class="section-title">Mensajes de WhatsApp predeterminados</div>' +
+        '<div id="hMessagesList">' + renderHomeMessagesList(home) + '</div>' +
+        '<button class="btn btn-outline btn-sm" id="hToggleAddMsg" type="button" style="width:100%;margin-bottom:10px;">+ Agregar mensaje</button>' +
+        '<div id="hAddMsgBox" hidden style="margin-bottom:12px;">' +
+          '<div class="field"><label>Etiqueta corta</label><input type="text" id="hMsgLabel" placeholder="Ej: Confirmar turno"></div>' +
+          '<div class="field"><label>Mensaje</label><textarea id="hMsgText" placeholder="Ej: Hola! Te confirmo que voy mañana a las 9."></textarea></div>' +
+          '<button class="btn btn-primary btn-sm" id="hMsgSave" type="button" style="width:100%;">Guardar mensaje</button>' +
+        '</div>';
+
       html += '<div class="section-title">Transporte</div>' +
         '<div id="transitBox">' +
           (home.stopId ? '<p style="font-size:12.5px;color:var(--muted);">Parada guardada: ' + escapeHtml(home.stopAddress || home.stopName || home.stopId) + '</p>' : '<p style="font-size:12.5px;color:var(--muted);">Sin parada guardada</p>') +
@@ -1721,21 +1975,47 @@
       document.getElementById('hMapsPaste').value = '';
       var st = document.getElementById('hLocationStatus');
       st.className = 'map-status-line ok';
-      st.textContent = 'Coordenadas cargadas (' + parsed.lat + ', ' + parsed.lon + ')';
+      st.textContent = 'Buscando la dirección...';
+      fetchReverseGeocode(parsed.lat, parsed.lon).then(function(label) {
+        st.textContent = label || (parsed.lat + ', ' + parsed.lon);
+      }).catch(function() {
+        st.textContent = 'Coordenadas cargadas';
+      });
       toast('Coordenadas cargadas');
     });
     document.getElementById('hPinMap').addEventListener('click', function() {
       var lat = document.getElementById('hLat').value ? Number(document.getElementById('hLat').value) : null;
       var lon = document.getElementById('hLon').value ? Number(document.getElementById('hLon').value) : null;
-      openMapPicker(lat && lon ? { lat: lat, lon: lon } : null, function(coords, label) {
+      function onPick(coords, label) {
         document.getElementById('hLat').value = coords.lat;
         document.getElementById('hLon').value = coords.lon;
         var st = document.getElementById('hLocationStatus');
         st.className = 'map-status-line ok';
         st.textContent = label;
         toast('Ubicación cargada');
-      });
+      }
+      if (lat && lon) { openMapPicker({ lat: lat, lon: lon }, onPick); return; }
+      var addr = document.getElementById('hAddress').value.trim();
+      openMapPicker(null, onPick);
+      if (addr) {
+        fetchGeocode(addr).then(function(results) {
+          if (results && results[0] && leafletPickerMap) {
+            leafletPickerMap.setView([results[0].lat, results[0].lon], 16);
+            setPickedMapPoint(results[0].lat, results[0].lon, true);
+          }
+        }).catch(function() {});
+      }
     });
+    if (document.getElementById('hPickContact')) {
+      document.getElementById('hPickContact').addEventListener('click', function() {
+        navigator.contacts.select(['tel', 'name'], { multiple: false }).then(function(contacts) {
+          if (!contacts || !contacts[0]) return;
+          var c = contacts[0];
+          if (c.tel && c.tel[0]) document.getElementById('hPhone').value = c.tel[0];
+          if (c.name && c.name[0] && !document.getElementById('hName').value) document.getElementById('hName').value = c.name[0];
+        }).catch(function() {});
+      });
+    }
 
     if (isEdit) {
       document.getElementById('hFindStop').addEventListener('click', function() {
@@ -1744,20 +2024,39 @@
       document.getElementById('hAddPago').addEventListener('click', function() {
         openPagoModal({ homeId: home.id, returnToHome: home.id });
       });
+      document.getElementById('hToggleAddMsg').addEventListener('click', function() {
+        document.getElementById('hAddMsgBox').hidden = !document.getElementById('hAddMsgBox').hidden;
+      });
+      document.getElementById('hMsgSave').addEventListener('click', function() {
+        var label = document.getElementById('hMsgLabel').value.trim();
+        var text = document.getElementById('hMsgText').value.trim();
+        if (!label || !text) { toast('Completá etiqueta y mensaje'); return; }
+        if (!home.messages) home.messages = [];
+        home.messages.push({ id: uid(), label: label, text: text });
+        save();
+        document.getElementById('hMessagesList').innerHTML = renderHomeMessagesList(home);
+        wireHomeMessageDeletes(home);
+        document.getElementById('hMsgLabel').value = '';
+        document.getElementById('hMsgText').value = '';
+        document.getElementById('hAddMsgBox').hidden = true;
+        toast('Mensaje guardado');
+      });
+      wireHomeMessageDeletes(home);
     }
 
     document.getElementById('hSave').addEventListener('click', function() {
       var name = document.getElementById('hName').value.trim();
       if (!name) { toast('El nombre es obligatorio'); return; }
+      var locationStatusEl = document.getElementById('hLocationStatus');
       var data = {
         name: name,
         phone: document.getElementById('hPhone').value.trim(),
         address: document.getElementById('hAddress').value.trim(),
         lat: document.getElementById('hLat').value ? Number(document.getElementById('hLat').value) : null,
         lon: document.getElementById('hLon').value ? Number(document.getElementById('hLon').value) : null,
+        locationLabel: locationStatusEl && locationStatusEl.classList.contains('ok') ? locationStatusEl.textContent : (home ? home.locationLabel : ''),
         rate: Number(document.getElementById('hRate').value) || 0,
         rateType: document.querySelector('#hRateTypePills button.active').getAttribute('data-rate-type'),
-        frequency: document.getElementById('hFreq').value,
         notes: document.getElementById('hNotes').value.trim()
       };
       var savedHome;
@@ -1818,6 +2117,26 @@
         toast('Hogar eliminado');
       });
     }
+  }
+
+  function renderHomeMessagesList(home) {
+    var msgs = home.messages || [];
+    if (msgs.length === 0) return '<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px;">Sin mensajes guardados todavía</div>';
+    return msgs.map(function(m) {
+      return '<div class="pay-list-item"><span>' + escapeHtml(m.label) + '</span>' +
+        '<button class="del" data-delmsg="' + m.id + '">Quitar</button></div>';
+    }).join('');
+  }
+
+  function wireHomeMessageDeletes(home) {
+    document.querySelectorAll('#hMessagesList [data-delmsg]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        home.messages = (home.messages || []).filter(function(m) { return m.id !== btn.getAttribute('data-delmsg'); });
+        save();
+        document.getElementById('hMessagesList').innerHTML = renderHomeMessagesList(home);
+        wireHomeMessageDeletes(home);
+      });
+    });
   }
 
   function renderHomeHistory(homeId) {
@@ -1904,7 +2223,11 @@
       if (!navigator.geolocation) { reject(new Error('sin soporte de geolocalización')); return; }
       navigator.geolocation.getCurrentPosition(
         function(pos) { resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }); },
-        function(err) { reject(new Error(err.message || 'permiso denegado')); },
+        function(err) {
+          var e = new Error(err.message || 'permiso denegado');
+          e.code = err.code;
+          reject(e);
+        },
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
       );
     });
@@ -1915,6 +2238,17 @@
   var pickedMapMarker = null;
   var pickedMapCoords = null;
   var mapPickerCallback = null;
+
+  function fetchGeocode(query) {
+    var url = OBA_BASE + 'geocode.json?q=' + encodeURIComponent(query);
+    return fetch(url).then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function(body) {
+      if (body.code !== 200) throw new Error(body.text || ('código ' + body.code));
+      return body.data || [];
+    });
+  }
 
   function fetchReverseGeocode(lat, lon) {
     var url = OBA_BASE + 'reverse.json?lat=' + lat + '&lon=' + lon;
@@ -2159,7 +2493,15 @@
       });
     }).catch(function(err) {
       var el = document.getElementById('transitContent');
-      if (el) el.innerHTML = '<p style="font-size:13px;color:var(--muted);">No pudimos calcular la ruta (' + escapeHtml(err.message) + '). Activá tu ubicación y probá de nuevo, o usá Google Maps.</p>';
+      if (!el) return;
+      var isPermDenied = err.code === 1;
+      var msg = isPermDenied
+        ? 'No tenemos permiso para usar tu ubicación. En iPhone, una vez que se lo negás a Safari no vuelve a preguntar solo: andá a Ajustes → Privacidad y Seguridad → Localización → Safari (sitios web) y elegí "Preguntar" o "Mientras se usa la app". Después volvé acá y tocá reintentar.'
+        : 'No pudimos calcular la ruta (' + escapeHtml(err.message) + ').';
+      el.innerHTML = '<p style="font-size:13px;color:var(--muted);">' + msg + '</p>' +
+        '<button class="btn btn-outline btn-sm" id="transitRetry" type="button" style="width:100%;margin-top:8px;">Reintentar</button>';
+      var retryBtn = document.getElementById('transitRetry');
+      if (retryBtn) retryBtn.addEventListener('click', function() { openTransitSheet(home); });
     });
   }
 
@@ -2230,6 +2572,25 @@
   document.getElementById('goToday').addEventListener('click', function() {
     state.weekStart = startOfWeek(new Date());
     state.selectedDate = todayStr();
+    state.monthCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    renderAgenda();
+  });
+
+  document.querySelectorAll('#agendaModeToggle button').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      state.agendaMode = btn.getAttribute('data-mode');
+      document.querySelectorAll('#agendaModeToggle button').forEach(function(b) { b.classList.toggle('active', b === btn); });
+      document.getElementById('weekStripRow').hidden = state.agendaMode !== 'week';
+      document.getElementById('monthNavRow').hidden = state.agendaMode !== 'month';
+      renderAgenda();
+    });
+  });
+  document.getElementById('prevMonth').addEventListener('click', function() {
+    state.monthCursor = addMonths(state.monthCursor, -1);
+    renderAgenda();
+  });
+  document.getElementById('nextMonth').addEventListener('click', function() {
+    state.monthCursor = addMonths(state.monthCursor, 1);
     renderAgenda();
   });
 
