@@ -1150,7 +1150,16 @@
   function shiftPaid(shift) {
     return paymentsForShift(shift.id).reduce(function(sum, p) { return sum + Number(p.amount); }, 0);
   }
+  // Un turno todavía no genera deuda si no se trabajó: o ya pasó su horario, o se
+  // marcó como completado a mano. Uno futuro con monto cargado no debe nada todavía.
+  function shiftHasHappened(shift) {
+    if (shift.status === 'completed') return true;
+    if (shift.status === 'cancelled') return false;
+    var dt = new Date(shift.date + 'T' + (shift.startTime || '00:00')).getTime();
+    return !isNaN(dt) && dt <= Date.now();
+  }
   function shiftPayStatus(shift) {
+    if (!shiftHasHappened(shift)) return 'na';
     var due = Number(shift.amountDue) || 0;
     if (due <= 0) return 'na';
     var paid = shiftPaid(shift);
@@ -1159,6 +1168,7 @@
     return 'pagado';
   }
   function shiftRemaining(shift) {
+    if (!shiftHasHappened(shift)) return 0;
     var due = Number(shift.amountDue) || 0;
     var paid = shiftPaid(shift);
     return Math.max(0, due - paid);
