@@ -1480,15 +1480,54 @@
   }
 
   // ---------- Modal infra ----------
+  // El gesto/botón de "volver" del celu apila una entrada de historial por cada
+  // modal (o el mapa) que se abre, así lo cierra a él en vez de salir de la app —
+  // y si hay varios (ej: el mapa arriba del hogar), cierra de a uno hasta llegar
+  // al home. Como también se puede cerrar por UI (X, Cancelar, Guardar), el
+  // popstate handler mira qué hay visible en pantalla en vez de confiar en que
+  // nadie más tocó el historial mientras tanto.
+  var navDepth = 0;
+  function pushNavLevel() {
+    navDepth++;
+    history.pushState({ limpiarteNav: navDepth }, '');
+  }
+  function popNavLevel() {
+    if (navDepth > 0) {
+      navDepth--;
+      history.back();
+    }
+  }
+  window.addEventListener('popstate', function() {
+    navDepth = Math.max(0, navDepth - 1);
+    var mapOverlay = document.getElementById('mapOverlay');
+    if (mapOverlay && !mapOverlay.hidden) {
+      closeMapPickerRaw();
+      return;
+    }
+    var modalRoot = document.getElementById('modalRoot');
+    if (modalRoot && modalRoot.innerHTML.trim() !== '') {
+      closeModalRaw();
+    }
+  });
+
   var activeWorkTimerInterval = null;
-  function closeModal() {
+  function closeModalRaw() {
     if (activeWorkTimerInterval) { clearInterval(activeWorkTimerInterval); activeWorkTimerInterval = null; }
     document.getElementById('modalRoot').innerHTML = '';
+  }
+  function closeModal() {
+    var wasOpen = document.getElementById('modalRoot').innerHTML.trim() !== '';
+    closeModalRaw();
+    if (wasOpen) popNavLevel();
   }
   // El btn-row final (Guardar/Cancelar/Eliminar) se separa del resto del contenido
   // y se muestra en un footer fijo, para no tener que scrollear un formulario largo
   // para llegar a esos botones.
   function openModal(innerHtml) {
+    // Si ya había un modal abierto (ej: turno -> "+Nuevo hogar", o pago -> volver
+    // al turno), esto reemplaza su contenido en el lugar en vez de cerrar y volver
+    // a abrir, así no se pisan los pasos del historial de "volver".
+    var replacing = document.getElementById('modalRoot').innerHTML.trim() !== '';
     var marker = '<div class="btn-row"';
     var idx = innerHtml.lastIndexOf(marker);
     var bodyHtml = innerHtml, footerHtml = '';
@@ -1509,6 +1548,7 @@
     document.querySelectorAll('.btn-cancel').forEach(function(btn) {
       btn.addEventListener('click', closeModal);
     });
+    if (!replacing) pushNavLevel();
   }
 
   // ---------- Configuración ----------
@@ -1913,11 +1953,12 @@
         notes: document.getElementById('pNotes').value
       });
       save();
-      closeModal();
       if (opts.returnToShift) {
         openTurnoModal(getShift(opts.returnToShift));
       } else if (opts.returnToHome) {
         openHogarModal(getHome(opts.returnToHome));
+      } else {
+        closeModal();
       }
       renderAll();
       toast('Pago registrado');
@@ -2152,7 +2193,6 @@
         toast('Hogar creado');
       }
       save();
-      closeModal();
       if (quickMode && pendingTurnoDraft) {
         var draft = pendingTurnoDraft;
         pendingTurnoDraft = null;
@@ -2168,6 +2208,8 @@
             document.getElementById('tNotes').value = draft.notes;
           }, 0);
         }
+      } else {
+        closeModal();
       }
       renderAll();
     });
@@ -2355,6 +2397,15 @@
 
   // onPick(coords, label) se llama cuando el usuario confirma un punto. existing, si se
   // pasa, centra el mapa ahí de entrada (por ejemplo, la ubicación ya guardada del hogar).
+  function closeMapPickerRaw() {
+    document.getElementById('mapOverlay').hidden = true;
+  }
+  function closeMapPicker() {
+    var wasOpen = !document.getElementById('mapOverlay').hidden;
+    closeMapPickerRaw();
+    if (wasOpen) popNavLevel();
+  }
+
   function openMapPicker(existing, onPick) {
     mapPickerCallback = onPick;
     pickedMapCoords = null;
@@ -2362,6 +2413,7 @@
     document.getElementById('mapPickedLabel').className = 'map-status-line';
     document.getElementById('mapPickedLabel').textContent = 'Todavía no tocaste el mapa.';
     document.getElementById('mapOverlay').hidden = false;
+    pushNavLevel();
 
     if (!leafletPickerMap) {
       leafletPickerMap = L.map('mapContainer').setView([-32.89, -68.84], 13);
@@ -2381,14 +2433,12 @@
     }
   }
 
-  document.getElementById('mapClose').addEventListener('click', function() {
-    document.getElementById('mapOverlay').hidden = true;
-  });
+  document.getElementById('mapClose').addEventListener('click', closeMapPicker);
   document.getElementById('mapConfirmBtn').addEventListener('click', function() {
     if (!pickedMapCoords || !mapPickerCallback) return;
     var label = document.getElementById('mapPickedLabel').textContent;
     mapPickerCallback(pickedMapCoords, label);
-    document.getElementById('mapOverlay').hidden = true;
+    closeMapPicker();
   });
 
   function findStopForHome(home) {
