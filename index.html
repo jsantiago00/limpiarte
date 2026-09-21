@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <script>
 (function(){
   try {
@@ -835,6 +836,52 @@
     z-index: 80;
     box-shadow: 0 4px 14px rgba(0,0,0,0.2);
   }
+
+  .map-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 65;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .map-sheet {
+    background: var(--surface);
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    border-radius: 20px 20px 0 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 92vh;
+  }
+  .map-sheet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .map-sheet-header span { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 16px; }
+  .map-sheet-header button {
+    border: none;
+    background: var(--surface-2);
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    font-size: 15px;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .map-hint { font-size: 11.5px; color: var(--muted); padding: 8px 16px 0; }
+  #mapContainer { height: 50vh; width: 100%; }
+  .map-sheet-footer {
+    padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border);
+  }
+  .map-status-line { font-size: 12.5px; color: var(--muted); margin-bottom: 8px; min-height: 16px; }
+  .map-status-line.ok { color: var(--success); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -890,8 +937,25 @@
 </button>
 
 <div id="modalRoot"></div>
+
+<div class="map-overlay" id="mapOverlay" hidden>
+  <div class="map-sheet">
+    <div class="map-sheet-header">
+      <span>Marcar ubicación</span>
+      <button id="mapClose" type="button">✕</button>
+    </div>
+    <p class="map-hint">Tocá el mapa donde querés marcar el punto.</p>
+    <div id="mapContainer"></div>
+    <div class="map-sheet-footer">
+      <div class="map-status-line" id="mapPickedLabel">Todavía no tocaste el mapa.</div>
+      <button class="btn btn-primary" id="mapConfirmBtn" type="button" disabled style="width:100%;">Usar este punto</button>
+    </div>
+  </div>
+</div>
+
 <div id="toastRoot"></div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 (function(){
   "use strict";
@@ -1576,11 +1640,16 @@
       '<div class="field"><label>Dirección</label><input type="text" id="hAddress" value="' + (home ? escapeHtml(home.address || '') : '') + '" placeholder="Calle y número, ciudad"></div>' +
       '<div class="field">' +
         '<label>Marcar ubicación</label>' +
-        '<button type="button" class="btn btn-outline btn-sm" id="hOpenMaps" style="width:100%;">Abrir Google Maps</button>' +
-        '<p style="font-size:11.5px;color:var(--muted);margin:6px 0;">Mantené presionado sobre la casa para soltar un pin, tocá las coordenadas que aparecen para copiarlas, y pegalas acá abajo.</p>' +
-        '<div style="display:flex;gap:8px;">' +
-          '<input type="text" id="hMapsPaste" placeholder="Pegá coordenadas o el link de Maps" style="flex:1;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);color:var(--text);">' +
-          '<button type="button" class="btn btn-outline btn-sm" id="hMapsUse">Usar</button>' +
+        '<button type="button" class="btn btn-primary btn-sm" id="hPinMap" style="width:100%;margin-bottom:6px;">📍 Marcar en el mapa</button>' +
+        '<div class="map-status-line' + (home && home.lat && home.lon ? ' ok' : '') + '" id="hLocationStatus" style="margin-bottom:6px;">' + (home && home.lat && home.lon ? 'Ubicación guardada (' + home.lat + ', ' + home.lon + ')' : '') + '</div>' +
+        '<button type="button" class="link-btn" id="hToggleMapsPaste" style="background:none;border:none;font-size:11.5px;padding:0;cursor:pointer;display:block;">¿Preferís abrir Google Maps o pegar coordenadas?</button>' +
+        '<div id="hMapsPasteBox" hidden style="margin-top:8px;">' +
+          '<button type="button" class="btn btn-outline btn-sm" id="hOpenMaps" style="width:100%;">Abrir Google Maps</button>' +
+          '<p style="font-size:11.5px;color:var(--muted);margin:6px 0;">Mantené presionado sobre la casa para soltar un pin, tocá las coordenadas que aparecen para copiarlas, y pegalas acá abajo.</p>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<input type="text" id="hMapsPaste" placeholder="Pegá coordenadas o el link de Maps" style="flex:1;padding:10px 11px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);color:var(--text);">' +
+            '<button type="button" class="btn btn-outline btn-sm" id="hMapsUse">Usar</button>' +
+          '</div>' +
         '</div>' +
       '</div>' +
       '<div class="field-row">' +
@@ -1636,6 +1705,10 @@
       });
     });
 
+    document.getElementById('hToggleMapsPaste').addEventListener('click', function() {
+      var box = document.getElementById('hMapsPasteBox');
+      box.hidden = !box.hidden;
+    });
     document.getElementById('hOpenMaps').addEventListener('click', function() {
       var q = document.getElementById('hAddress').value.trim() || 'Mendoza, Argentina';
       window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q), '_blank');
@@ -1646,7 +1719,22 @@
       document.getElementById('hLat').value = parsed.lat;
       document.getElementById('hLon').value = parsed.lon;
       document.getElementById('hMapsPaste').value = '';
+      var st = document.getElementById('hLocationStatus');
+      st.className = 'map-status-line ok';
+      st.textContent = 'Coordenadas cargadas (' + parsed.lat + ', ' + parsed.lon + ')';
       toast('Coordenadas cargadas');
+    });
+    document.getElementById('hPinMap').addEventListener('click', function() {
+      var lat = document.getElementById('hLat').value ? Number(document.getElementById('hLat').value) : null;
+      var lon = document.getElementById('hLon').value ? Number(document.getElementById('hLon').value) : null;
+      openMapPicker(lat && lon ? { lat: lat, lon: lon } : null, function(coords, label) {
+        document.getElementById('hLat').value = coords.lat;
+        document.getElementById('hLon').value = coords.lon;
+        var st = document.getElementById('hLocationStatus');
+        st.className = 'map-status-line ok';
+        st.textContent = label;
+        toast('Ubicación cargada');
+      });
     });
 
     if (isEdit) {
@@ -1822,6 +1910,79 @@
     });
   }
 
+  // ---------- Marcar en el mapa (Leaflet + tiles de OpenStreetMap) ----------
+  var leafletPickerMap = null;
+  var pickedMapMarker = null;
+  var pickedMapCoords = null;
+  var mapPickerCallback = null;
+
+  function fetchReverseGeocode(lat, lon) {
+    var url = OBA_BASE + 'reverse.json?lat=' + lat + '&lon=' + lon;
+    return fetch(url).then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function(body) {
+      if (body.code !== 200) throw new Error(body.text || ('código ' + body.code));
+      return body.data && body.data.label;
+    });
+  }
+
+  function setPickedMapPoint(lat, lon, skipMove) {
+    pickedMapCoords = { lat: lat, lon: lon };
+    if (pickedMapMarker) { pickedMapMarker.setLatLng([lat, lon]); }
+    else { pickedMapMarker = L.marker([lat, lon]).addTo(leafletPickerMap); }
+    if (!skipMove) leafletPickerMap.panTo([lat, lon]);
+    document.getElementById('mapConfirmBtn').disabled = false;
+    var labelEl = document.getElementById('mapPickedLabel');
+    labelEl.className = 'map-status-line';
+    labelEl.textContent = 'Buscando la dirección...';
+    fetchReverseGeocode(lat, lon).then(function(label) {
+      labelEl.className = 'map-status-line ok';
+      labelEl.textContent = label || (lat.toFixed(5) + ', ' + lon.toFixed(5));
+    }).catch(function() {
+      labelEl.className = 'map-status-line ok';
+      labelEl.textContent = lat.toFixed(5) + ', ' + lon.toFixed(5);
+    });
+  }
+
+  // onPick(coords, label) se llama cuando el usuario confirma un punto. existing, si se
+  // pasa, centra el mapa ahí de entrada (por ejemplo, la ubicación ya guardada del hogar).
+  function openMapPicker(existing, onPick) {
+    mapPickerCallback = onPick;
+    pickedMapCoords = null;
+    document.getElementById('mapConfirmBtn').disabled = true;
+    document.getElementById('mapPickedLabel').className = 'map-status-line';
+    document.getElementById('mapPickedLabel').textContent = 'Todavía no tocaste el mapa.';
+    document.getElementById('mapOverlay').hidden = false;
+
+    if (!leafletPickerMap) {
+      leafletPickerMap = L.map('mapContainer').setView([-32.89, -68.84], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(leafletPickerMap);
+      leafletPickerMap.on('click', function(e) { setPickedMapPoint(e.latlng.lat, e.latlng.lng); });
+    } else {
+      pickedMapMarker = null;
+    }
+    setTimeout(function() { leafletPickerMap.invalidateSize(); }, 60);
+
+    if (existing && existing.lat && existing.lon) {
+      leafletPickerMap.setView([existing.lat, existing.lon], 16);
+      setPickedMapPoint(existing.lat, existing.lon, true);
+    }
+  }
+
+  document.getElementById('mapClose').addEventListener('click', function() {
+    document.getElementById('mapOverlay').hidden = true;
+  });
+  document.getElementById('mapConfirmBtn').addEventListener('click', function() {
+    if (!pickedMapCoords || !mapPickerCallback) return;
+    var label = document.getElementById('mapPickedLabel').textContent;
+    mapPickerCallback(pickedMapCoords, label);
+    document.getElementById('mapOverlay').hidden = true;
+  });
+
   function findStopForHome(home) {
     if (!home.lat || !home.lon) { toast('Cargá latitud y longitud primero'); return; }
     var box = document.getElementById('transitBox');
@@ -1972,7 +2133,10 @@
     var html = '<h2>Cómo llego</h2>' +
       '<p style="font-size:13px;color:var(--muted);margin-top:-6px;">' + escapeHtml(home.name) + '</p>' +
       '<div id="transitContent"><p class="transit-loading">Buscando las mejores opciones...</p></div>' +
-      '<div class="btn-row"><a class="btn btn-primary" style="text-align:center;line-height:2.2;text-decoration:none;" id="transitMapsLink" href="' + mapsUrl(home) + '" target="_blank" rel="noopener">Ver ruta completa en Google Maps</a></div>';
+      '<div class="btn-row">' +
+        '<a class="btn btn-outline" style="text-align:center;line-height:2.2;text-decoration:none;" id="transitArteLink" href="https://santiagososa.com.ar/transportarte/" target="_blank" rel="noopener">Abrir en TransportArte</a>' +
+        '<a class="btn btn-primary" style="text-align:center;line-height:2.2;text-decoration:none;" id="transitMapsLink" href="' + mapsUrl(home) + '" target="_blank" rel="noopener">Ver ruta completa en Google Maps</a>' +
+      '</div>';
     openModal(html);
 
     if (!home.lat || !home.lon) {
@@ -1985,6 +2149,10 @@
       var link = document.getElementById('transitMapsLink');
       if (link) {
         link.href = 'https://www.google.com/maps/dir/?api=1&origin=' + pos.lat + ',' + pos.lon + '&destination=' + home.lat + ',' + home.lon + '&travelmode=transit';
+      }
+      var arteLink = document.getElementById('transitArteLink');
+      if (arteLink) {
+        arteLink.href = 'https://santiagososa.com.ar/transportarte/?fromLat=' + pos.lat + '&fromLon=' + pos.lon + '&toLat=' + home.lat + '&toLon=' + home.lon;
       }
       return fetchRoute(pos.lat, pos.lon, home.lat, home.lon).then(function(data) {
         renderTransitContent(data);
