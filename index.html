@@ -12,6 +12,8 @@
   try {
     var p = localStorage.getItem('limpiarte_palette_v1');
     if (p) document.documentElement.setAttribute('data-palette', p);
+    var t = localStorage.getItem('limpiarte_theme_v1');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
   } catch (e) {}
 })();
 </script>
@@ -40,7 +42,7 @@
     --danger-bg: #f8e1de;
   }
   @media (prefers-color-scheme: dark) {
-    :root[data-palette="terracota"] {
+    :root[data-palette="terracota"]:not([data-theme="light"]) {
       --bg: #211a15;
       --surface: #2c2119;
       --surface-2: #382a1f;
@@ -56,6 +58,22 @@
       --danger: #e0776a;
       --danger-bg: #3e211d;
     }
+  }
+  :root[data-palette="terracota"][data-theme="dark"] {
+    --bg: #211a15;
+    --surface: #2c2119;
+    --surface-2: #382a1f;
+    --text: #f1e4d6;
+    --muted: #b6a08a;
+    --border: #4a392c;
+    --primary: #e08a5b;
+    --primary-dark: #c1673b;
+    --success: #8fb96b;
+    --success-bg: #2c3a22;
+    --warning: #e0aa53;
+    --warning-bg: #3e2f14;
+    --danger: #e0776a;
+    --danger-bg: #3e211d;
   }
 
   /* Salvia */
@@ -76,7 +94,7 @@
     --danger-bg: #f6e2dd;
   }
   @media (prefers-color-scheme: dark) {
-    :root[data-palette="salvia"] {
+    :root[data-palette="salvia"]:not([data-theme="light"]) {
       --bg: #171c15;
       --surface: #212820;
       --surface-2: #2a3327;
@@ -92,6 +110,22 @@
       --danger: #d68a78;
       --danger-bg: #3e2622;
     }
+  }
+  :root[data-palette="salvia"][data-theme="dark"] {
+    --bg: #171c15;
+    --surface: #212820;
+    --surface-2: #2a3327;
+    --text: #e6ede1;
+    --muted: #a2b099;
+    --border: #3a4535;
+    --primary: #93b97e;
+    --primary-dark: #6f8f5c;
+    --success: #7cbf87;
+    --success-bg: #223829;
+    --warning: #d4a75d;
+    --warning-bg: #3e3018;
+    --danger: #d68a78;
+    --danger-bg: #3e2622;
   }
 
   /* Lavanda */
@@ -112,7 +146,7 @@
     --danger-bg: #f5e0e5;
   }
   @media (prefers-color-scheme: dark) {
-    :root[data-palette="lavanda"] {
+    :root[data-palette="lavanda"]:not([data-theme="light"]) {
       --bg: #1c1721;
       --surface: #26202c;
       --surface-2: #322a3a;
@@ -128,6 +162,22 @@
       --danger: #d98297;
       --danger-bg: #3e2028;
     }
+  }
+  :root[data-palette="lavanda"][data-theme="dark"] {
+    --bg: #1c1721;
+    --surface: #26202c;
+    --surface-2: #322a3a;
+    --text: #ece6f0;
+    --muted: #ab9fb8;
+    --border: #453a4f;
+    --primary: #ab8ed4;
+    --primary-dark: #8067a8;
+    --success: #7fbf96;
+    --success-bg: #223a2c;
+    --warning: #d9ac60;
+    --warning-bg: #3e2f16;
+    --danger: #d98297;
+    --danger-bg: #3e2028;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -183,6 +233,21 @@
   }
   .theme-switch button.active {
     box-shadow: 0 0 0 2px var(--text);
+  }
+  .header-controls { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex-shrink: 0; }
+  .mode-toggle {
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    font-size: 12.5px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
   }
   header.app-header .sub {
     margin: 2px 0 0;
@@ -561,6 +626,7 @@
     z-index: 50;
     display: flex;
     align-items: flex-end;
+    justify-content: center;
   }
   .sheet {
     background: var(--surface);
@@ -584,7 +650,7 @@
     cursor: pointer;
     color: var(--muted);
   }
-  .sheet-wrap { position: relative; }
+  .sheet-wrap { position: relative; width: 100%; }
 
   .field { margin-bottom: 12px; }
   .field label {
@@ -625,6 +691,19 @@
   .pill-group button.active[data-status=scheduled] { background: var(--primary); border-color: var(--primary); color: #fff; }
   .pill-group button.active[data-status=completed] { background: var(--success); border-color: var(--success); color: #fff; }
   .pill-group button.active[data-status=cancelled] { background: var(--muted); border-color: var(--muted); color: #fff; }
+  .pill-group button.active[data-rate-type] { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+  .work-timer {
+    background: var(--surface-2);
+    border-radius: 12px;
+    padding: 12px 13px;
+    margin-bottom: 12px;
+  }
+  .work-timer .wt-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 6px; }
+  .work-timer .wt-row:last-child { margin-bottom: 0; }
+  .work-timer .wt-label { color: var(--muted); font-weight: 600; }
+  .work-timer .wt-value { font-weight: 700; }
+  .work-timer .wt-value.live { color: var(--success); }
 
   .btn-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .btn {
@@ -765,7 +844,10 @@
     <h1>LimpiArte</h1>
     <p class="sub" id="headerSub">Tu semana de trabajo</p>
   </div>
-  <div class="theme-switch" id="themeSwitch"></div>
+  <div class="header-controls">
+    <div class="theme-switch" id="themeSwitch"></div>
+    <button class="mode-toggle" id="modeToggle" type="button" title="Modo claro/oscuro"></button>
+  </div>
 </header>
 
 <div id="nextBanner"></div>
@@ -842,6 +924,30 @@
       btn.addEventListener('click', function() { setPalette(btn.getAttribute('data-palette')); });
     });
   }
+
+  var THEME_KEY = 'limpiarte_theme_v1';
+  var THEME_ICONS = { auto: '🌓', light: '☀️', dark: '🌙' };
+  function getTheme() {
+    try { return localStorage.getItem(THEME_KEY) || 'auto'; } catch (e) { return 'auto'; }
+  }
+  function setTheme(mode) {
+    if (mode === 'auto') { document.documentElement.removeAttribute('data-theme'); }
+    else { document.documentElement.setAttribute('data-theme', mode); }
+    try { localStorage.setItem(THEME_KEY, mode); } catch (e) {}
+    renderModeToggle();
+  }
+  function renderModeToggle() {
+    var current = getTheme();
+    var btn = document.getElementById('modeToggle');
+    btn.textContent = THEME_ICONS[current];
+    var labels = { auto: 'Modo automático (según el celular)', light: 'Modo claro', dark: 'Modo oscuro' };
+    btn.title = labels[current] + ' · tocá para cambiar';
+  }
+  document.getElementById('modeToggle').addEventListener('click', function() {
+    var order = ['auto', 'light', 'dark'];
+    var next = order[(order.indexOf(getTheme()) + 1) % order.length];
+    setTheme(next);
+  });
 
   var WEEKDAYS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
   var MONTHS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -1076,7 +1182,7 @@
         '<div class="name">' + escapeHtml(h.name) + '</div>' +
         '<div class="addr">' + escapeHtml(h.address || 'Sin dirección') + '</div>' +
         '<div class="row">' +
-          '<span class="rate">' + fmtMoney(h.rate) + '</span>' +
+          '<span class="rate">' + fmtMoney(h.rate) + (h.rateType === 'hourly' ? '/hora' : '') + '</span>' +
           '<span>' + (upcoming ? 'Próx: ' + fmtDisplayDate(fromDateStr(upcoming.date)) + ' ' + upcoming.startTime : 'Sin próximo turno') + '</span>' +
         '</div>' +
         (debt > 0 ? '<div class="row" style="margin-top:4px;color:var(--danger);font-weight:700;">Debe ' + fmtMoney(debt) + '</div>' : '') +
@@ -1149,7 +1255,11 @@
   }
 
   // ---------- Modal infra ----------
-  function closeModal() { document.getElementById('modalRoot').innerHTML = ''; }
+  var activeWorkTimerInterval = null;
+  function closeModal() {
+    if (activeWorkTimerInterval) { clearInterval(activeWorkTimerInterval); activeWorkTimerInterval = null; }
+    document.getElementById('modalRoot').innerHTML = '';
+  }
   function openModal(innerHtml) {
     document.getElementById('modalRoot').innerHTML =
       '<div class="overlay" id="ovl"><div class="sheet-wrap"><div class="sheet">' +
@@ -1163,6 +1273,91 @@
 
   // ---------- Turno modal ----------
   var pendingTurnoDraft = null;
+
+  function fmtHM(ms) {
+    var d = new Date(ms);
+    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+  function fmtDuration(ms) {
+    var totalMin = Math.max(0, Math.round(ms / 60000));
+    var h = Math.floor(totalMin / 60), m = totalMin % 60;
+    return (h > 0 ? h + 'h ' : '') + m + 'min';
+  }
+
+  function renderWorkTimerContent(shift, home) {
+    if (!shift.workStart) {
+      return '<button class="btn btn-primary btn-full" id="tStartWork" type="button">▶ Empecé a trabajar</button>';
+    }
+    if (!shift.workEnd) {
+      return '<div class="wt-row"><span class="wt-label">Empezaste</span><span class="wt-value">' + fmtHM(shift.workStart) + '</span></div>' +
+        '<div class="wt-row"><span class="wt-label">Llevás</span><span class="wt-value live" id="wtLive">' + fmtDuration(Date.now() - shift.workStart) + '</span></div>' +
+        '<button class="btn btn-primary btn-full" id="tEndWork" type="button" style="margin-top:8px;">⏹ Terminé de trabajar</button>';
+    }
+    var durationMs = shift.workEnd - shift.workStart;
+    var hours = durationMs / 3600000;
+    var computedAmount = Math.round(hours * (home.rate || 0));
+    return '<div class="wt-row"><span class="wt-label">Trabajaste</span><span class="wt-value">' + fmtHM(shift.workStart) + ' a ' + fmtHM(shift.workEnd) + ' (' + fmtDuration(durationMs) + ')</span></div>' +
+      '<div class="wt-row"><span class="wt-label">Calculado</span><span class="wt-value">' + fmtMoney(computedAmount) + '</span></div>' +
+      '<button class="btn btn-outline btn-sm" id="tResetWork" type="button" style="margin-top:8px;width:100%;">Reiniciar registro</button>';
+  }
+
+  function wireWorkTimer(shift, home) {
+    function refreshBox() {
+      var box = document.getElementById('workTimerBox');
+      if (!box) return;
+      box.innerHTML = renderWorkTimerContent(shift, home);
+      bindButtons();
+    }
+    function bindButtons() {
+      var startBtn = document.getElementById('tStartWork');
+      if (startBtn) startBtn.addEventListener('click', function() {
+        shift.workStart = Date.now();
+        delete shift.workEnd;
+        save();
+        refreshBox();
+        startLiveTick();
+      });
+      var endBtn = document.getElementById('tEndWork');
+      if (endBtn) endBtn.addEventListener('click', function() {
+        shift.workEnd = Date.now();
+        var hours = (shift.workEnd - shift.workStart) / 3600000;
+        var computed = Math.round(hours * (home.rate || 0));
+        shift.amountDue = computed;
+        shift.status = 'completed';
+        save();
+        var amountInput = document.getElementById('tAmount');
+        if (amountInput) amountInput.value = computed;
+        var completedPill = document.querySelector('#tStatusPills button[data-status="completed"]');
+        if (completedPill) {
+          document.querySelectorAll('#tStatusPills button').forEach(function(b) { b.classList.remove('active'); });
+          completedPill.classList.add('active');
+        }
+        stopLiveTick();
+        refreshBox();
+        toast('Registrado: ' + fmtDuration(shift.workEnd - shift.workStart) + ' → ' + fmtMoney(computed));
+      });
+      var resetBtn = document.getElementById('tResetWork');
+      if (resetBtn) resetBtn.addEventListener('click', function() {
+        delete shift.workStart;
+        delete shift.workEnd;
+        save();
+        stopLiveTick();
+        refreshBox();
+      });
+    }
+    function startLiveTick() {
+      stopLiveTick();
+      activeWorkTimerInterval = setInterval(function() {
+        var live = document.getElementById('wtLive');
+        if (live && shift.workStart) live.textContent = fmtDuration(Date.now() - shift.workStart);
+      }, 30000);
+    }
+    function stopLiveTick() {
+      if (activeWorkTimerInterval) { clearInterval(activeWorkTimerInterval); activeWorkTimerInterval = null; }
+    }
+    bindButtons();
+    if (shift.workStart && !shift.workEnd) startLiveTick();
+  }
 
   function openTurnoModal(shift, presetDate) {
     var isEdit = !!shift;
@@ -1193,12 +1388,18 @@
       '</div>' +
       '<div class="field"><label>Monto a cobrar</label><input type="number" id="tAmount" value="' + amountDue + '" placeholder="0"></div>';
 
+    var editHome = shift ? getHome(shift.homeId) : null;
+
     if (isEdit) {
       html += '<div class="field"><label>Estado</label><div class="pill-group" id="tStatusPills">' +
         '<button type="button" data-status="scheduled" class="' + (status === 'scheduled' ? 'active' : '') + '">Programado</button>' +
         '<button type="button" data-status="completed" class="' + (status === 'completed' ? 'active' : '') + '">Completado</button>' +
         '<button type="button" data-status="cancelled" class="' + (status === 'cancelled' ? 'active' : '') + '">Cancelado</button>' +
       '</div></div>';
+      if (editHome && editHome.rateType === 'hourly') {
+        html += '<div class="section-title">Registrar trabajo (' + escapeHtml(editHome.name) + ' cobra ' + fmtMoney(editHome.rate) + '/hora)</div>' +
+          '<div class="work-timer" id="workTimerBox">' + renderWorkTimerContent(shift, editHome) + '</div>';
+      }
     } else {
       html += '<div class="check-row"><input type="checkbox" id="tRepeat"><label for="tRepeat">Repetir turno</label></div>' +
         '<div id="tRepeatFields" hidden>' +
@@ -1245,6 +1446,9 @@
       document.getElementById('tAddPago').addEventListener('click', function() {
         openPagoModal({ shiftId: shift.id, returnToShift: shift.id });
       });
+      if (editHome && editHome.rateType === 'hourly') {
+        wireWorkTimer(shift, editHome);
+      }
     }
 
     document.getElementById('tNewHome').addEventListener('click', function() {
@@ -1383,7 +1587,11 @@
         '<div class="field"><label>Latitud (opcional)</label><input type="text" id="hLat" value="' + (home && home.lat ? home.lat : '') + '" placeholder="-32.89"></div>' +
         '<div class="field"><label>Longitud (opcional)</label><input type="text" id="hLon" value="' + (home && home.lon ? home.lon : '') + '" placeholder="-68.84"></div>' +
       '</div>' +
-      '<div class="field"><label>Tarifa</label><input type="number" id="hRate" value="' + (home ? home.rate : '') + '" placeholder="0"></div>' +
+      '<div class="field"><label>Cómo cobrás</label><div class="pill-group" id="hRateTypePills">' +
+        '<button type="button" data-rate-type="fixed" class="' + ((!home || home.rateType !== 'hourly') ? 'active' : '') + '">Monto fijo</button>' +
+        '<button type="button" data-rate-type="hourly" class="' + (home && home.rateType === 'hourly' ? 'active' : '') + '">Por hora</button>' +
+      '</div></div>' +
+      '<div class="field"><label id="hRateLabel">' + (home && home.rateType === 'hourly' ? 'Tarifa por hora' : 'Tarifa') + '</label><input type="number" id="hRate" value="' + (home ? home.rate : '') + '" placeholder="0"></div>' +
       '<div class="field"><label>Frecuencia</label><select id="hFreq">' +
         ['none:Única vez', 'weekly:Semanal', 'biweekly:Quincenal', 'monthly:Mensual', 'custom:Otra / manual'].map(function(opt) {
           var parts = opt.split(':');
@@ -1419,6 +1627,15 @@
 
     openModal(html);
 
+    document.querySelectorAll('#hRateTypePills button').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('#hRateTypePills button').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        var isHourly = btn.getAttribute('data-rate-type') === 'hourly';
+        document.getElementById('hRateLabel').textContent = isHourly ? 'Tarifa por hora' : 'Tarifa';
+      });
+    });
+
     document.getElementById('hOpenMaps').addEventListener('click', function() {
       var q = document.getElementById('hAddress').value.trim() || 'Mendoza, Argentina';
       window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q), '_blank');
@@ -1451,6 +1668,7 @@
         lat: document.getElementById('hLat').value ? Number(document.getElementById('hLat').value) : null,
         lon: document.getElementById('hLon').value ? Number(document.getElementById('hLon').value) : null,
         rate: Number(document.getElementById('hRate').value) || 0,
+        rateType: document.querySelector('#hRateTypePills button.active').getAttribute('data-rate-type'),
         frequency: document.getElementById('hFreq').value,
         notes: document.getElementById('hNotes').value.trim()
       };
@@ -1858,6 +2076,7 @@
   // ---------- Init ----------
   function init() {
     renderThemeSwitch();
+    renderModeToggle();
     renderAll();
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       setTimeout(function() {
