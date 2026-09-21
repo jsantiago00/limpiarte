@@ -303,6 +303,21 @@
     flex-wrap: wrap;
     position: relative;
   }
+  .next-banner .banner-timer { position: relative; margin: 2px 0 12px; }
+  .next-banner .banner-timer-live { font-size: 12.5px; opacity: 0.9; margin: 0 0 6px; }
+  .next-banner .banner-timer-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    background: rgba(255,255,255,0.22);
+    border: 1px solid rgba(255,255,255,0.4);
+    color: #fff;
+    border-radius: 12px;
+    padding: 11px;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+  }
   .next-banner .actions a, .next-banner .actions button {
     display: inline-flex;
     align-items: center;
@@ -1194,18 +1209,20 @@
     return Math.max(0, raw - unassigned);
   }
 
+  function shiftStartMs(shift) {
+    return new Date(shift.date + 'T' + (shift.startTime || '00:00')).getTime();
+  }
   function nextUpcomingShift() {
     var now = Date.now();
+    var windowMs = settings.minHours * 3600000;
     var upcoming = db.shifts.filter(function(s) {
       if (s.status !== 'scheduled') return false;
-      var dt = new Date(s.date + 'T' + (s.startTime || '00:00')).getTime();
-      return dt >= now - 15 * 60000; // include one already started within 15min
+      var dt = shiftStartMs(s);
+      // Uno que ya arrancó se sigue mostrando (con los botones de empezar/terminar)
+      // hasta el mismo margen que se usa como mínimo de horas facturadas.
+      return dt >= now - windowMs;
     });
-    upcoming.sort(function(a, b) {
-      var da = new Date(a.date + 'T' + (a.startTime || '00:00')).getTime();
-      var db_ = new Date(b.date + 'T' + (b.startTime || '00:00')).getTime();
-      return da - db_;
-    });
+    upcoming.sort(function(a, b) { return shiftStartMs(a) - shiftStartMs(b); });
     return upcoming[0] || null;
   }
 
@@ -1234,7 +1251,18 @@
   var ICON_PLUS_SM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
 
   // ---------- Render: header banner ----------
+  var bannerLiveInterval = null;
+  function completeShiftFromTimer(shift, home) {
+    shift.workEnd = Date.now();
+    if (home && home.rateType === 'hourly') {
+      var hours = Math.max((shift.workEnd - shift.workStart) / 3600000, settings.minHours);
+      shift.amountDue = Math.round(hours * (home.rate || 0));
+    }
+    shift.status = 'completed';
+    save();
+  }
   function renderNextBanner() {
+    if (bannerLiveInterval) { clearInterval(bannerLiveInterval); bannerLiveInterval = null; }
     var root = document.getElementById('nextBanner');
     var shift = nextUpcomingShift();
     if (!shift) {
@@ -1243,11 +1271,27 @@
     }
     var home = getHome(shift.homeId);
     var dateLabel = isToday(shift.date) ? 'Hoy' : fmtDisplayDate(fromDateStr(shift.date));
+    var now = Date.now();
+    var startMs = shiftStartMs(shift);
+    var windowEndMs = startMs + settings.minHours * 3600000;
+    var inWindow = !isNaN(startMs) && now >= startMs && now <= windowEndMs;
+
+    var timerHtml = '';
+    if (inWindow) {
+      if (!shift.workStart) {
+        timerHtml = '<button class="banner-timer-btn" id="bannerStartWork" type="button">▶ Empezar desde ahora</button>';
+      } else {
+        timerHtml = '<div class="banner-timer-live" id="bannerLive">Llevás ' + fmtDuration(now - shift.workStart) + '</div>' +
+          '<button class="banner-timer-btn" id="bannerEndWork" type="button">⏹ Terminé de trabajar</button>';
+      }
+    }
+
     root.innerHTML =
       '<div class="next-banner">' +
         '<p class="label">' + ICON_HOME + ' Próxima casa</p>' +
         '<p class="title">' + escapeHtml(home ? home.name : '(hogar eliminado)') + '</p>' +
         '<p class="meta">' + dateLabel + ' · ' + (shift.startTime || '') + (home && home.address ? ' · ' + escapeHtml(home.address) : '') + '</p>' +
+        (timerHtml ? '<div class="banner-timer">' + timerHtml + '</div>' : '') +
         '<div class="actions">' +
           (home && home.phone ? '<button data-wa="' + home.id + '">' + ICON_CHAT + ' WhatsApp</button>' : '') +
           (home ? '<button data-howto="' + home.id + '">' + ICON_PIN + ' Cómo llego</button>' : '') +
@@ -1257,6 +1301,27 @@
     if (waBtn) waBtn.addEventListener('click', function() { openWhatsAppPicker(home); });
     var howtoBtn = root.querySelector('[data-howto]');
     if (howtoBtn) howtoBtn.addEventListener('click', function() { openTransitSheet(home); });
+
+    var startBtn = document.getElementById('bannerStartWork');
+    if (startBtn) startBtn.addEventListener('click', function() {
+      shift.workStart = Date.now();
+      delete shift.workEnd;
+      save();
+      renderAll();
+    });
+    var endBtn = document.getElementById('bannerEndWork');
+    if (endBtn) endBtn.addEventListener('click', function() {
+      var durationMs = Date.now() - shift.workStart;
+      completeShiftFromTimer(shift, home);
+      toast('Turno completado (' + fmtDuration(durationMs) + ')');
+      renderAll();
+    });
+    if (inWindow && shift.workStart && !shift.workEnd) {
+      bannerLiveInterval = setInterval(function() {
+        var el = document.getElementById('bannerLive');
+        if (el) el.textContent = 'Llevás ' + fmtDuration(Date.now() - shift.workStart);
+      }, 30000);
+    }
   }
 
   // ---------- Render: agenda ----------
@@ -1362,7 +1427,7 @@
     container.innerHTML = html;
 
     container.querySelectorAll('[data-shift]').forEach(function(el) {
-      el.addEventListener('click', function() { openTurnoModal(getShift(el.getAttribute('data-shift'))); });
+      el.addEventListener('click', function() { openTurnoDetail(getShift(el.getAttribute('data-shift'))); });
     });
     container.querySelectorAll('[data-quicknote]').forEach(function(el) {
       el.addEventListener('click', function(ev) {
@@ -1468,7 +1533,7 @@
       });
     });
     container.querySelectorAll('[data-shift]').forEach(function(el) {
-      el.addEventListener('click', function() { openTurnoModal(getShift(el.getAttribute('data-shift'))); });
+      el.addEventListener('click', function() { openTurnoDetail(getShift(el.getAttribute('data-shift'))); });
     });
   }
 
@@ -1704,6 +1769,94 @@
     }
     bindButtons();
     if (shift.workStart && !shift.workEnd) startLiveTick();
+  }
+
+  // Vista de un turno ya agendado: info de lectura + "Mover turno" (edita hogar,
+  // fecha, hora y notas) y "Cancelar turno" (borra el turno, con confirmación). El
+  // estado ya no se toca a mano acá: pasa a completado solo desde los botones de
+  // "Próxima casa", o se cancela (se borra) desde acá.
+  function openTurnoDetail(shift) {
+    var home = getHome(shift.homeId);
+    var d = fromDateStr(shift.date);
+    var dayIdx = (d.getDay() + 6) % 7;
+    var due = Number(shift.amountDue) || 0;
+    var paid = shiftPaid(shift);
+    var html = '<h2>Turno</h2>' +
+      '<div class="field"><label>Hogar</label><div style="font-size:15.5px;font-weight:700;">' + escapeHtml(home ? home.name : '(hogar eliminado)') + '</div></div>' +
+      '<div class="field"><label>Fecha y hora</label><div>' + WEEKDAYS[dayIdx] + ' ' + fmtDisplayDate(d) + ' · ' + (shift.startTime || '--:--') + '</div></div>' +
+      '<div class="field"><label>Tarifa</label><div>' + (home ? (fmtMoney(home.rate) + (home.rateType === 'hourly' ? '/hora' : ' (monto fijo)')) : '-') + '</div></div>' +
+      (shift.notes ? '<div class="field"><label>Notas</label><div style="white-space:pre-wrap;">' + escapeHtml(shift.notes) + '</div></div>' : '') +
+      '<div class="section-title">Pagos</div>' +
+      '<div class="due-summary">' +
+        '<div class="row"><span>Debe</span><span>' + fmtMoney(due) + '</span></div>' +
+        '<div class="row"><span>Pagado</span><span>' + fmtMoney(paid) + '</span></div>' +
+        '<div class="row total"><span>Resta</span><span>' + fmtMoney(Math.max(0, due - paid)) + '</span></div>' +
+      '</div>' +
+      '<div>' + renderPayList(shift.id) + '</div>' +
+      '<button class="btn btn-outline btn-sm" id="tdAddPago" type="button" style="width:100%;margin-bottom:10px;">+ Agregar pago</button>' +
+      '<div class="btn-row">' +
+        '<button class="btn btn-secondary" id="tdMove" type="button">Mover turno</button>' +
+        '<button class="btn btn-danger" id="tdCancel" type="button">Cancelar turno</button>' +
+      '</div>';
+    openModal(html);
+    document.getElementById('tdAddPago').addEventListener('click', function() {
+      openPagoModal({ shiftId: shift.id, returnToShift: shift.id });
+    });
+    document.getElementById('tdMove').addEventListener('click', function() {
+      openTurnoMoveModal(shift);
+    });
+    document.getElementById('tdCancel').addEventListener('click', function() {
+      if (!confirm('¿Estás seguro de querer cancelar el turno?')) return;
+      db.shifts = db.shifts.filter(function(s) { return s.id !== shift.id; });
+      db.payments = db.payments.filter(function(p) { return p.shiftId !== shift.id; });
+      save();
+      closeModal();
+      renderAll();
+      toast('Turno cancelado');
+    });
+  }
+
+  function openTurnoMoveModal(shift) {
+    var homeOptions = db.homes.map(function(h) {
+      var sel = shift.homeId === h.id ? 'selected' : '';
+      return '<option value="' + h.id + '" ' + sel + '>' + escapeHtml(h.name) + '</option>';
+    }).join('');
+    var html = '<h2>Mover turno</h2>' +
+      '<div class="field">' +
+        '<label>Hogar</label>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<select id="tmHome" style="flex:1;">' + (db.homes.length ? homeOptions : '<option value="">Sin hogares cargados</option>') + '</select>' +
+          '<button class="btn btn-outline btn-sm" id="tmNewHome" type="button">+ Nuevo</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="field"><label>Fecha</label><input type="date" id="tmDate" value="' + shift.date + '"></div>' +
+      '<div class="field"><label>Hora inicio</label>' + timePickerHtml('tmStart', shift.startTime) + '</div>' +
+      '<div class="field"><label>Notas</label><textarea id="tmNotes" placeholder="Opcional">' + escapeHtml(shift.notes || '') + '</textarea></div>' +
+      '<div class="btn-row">' +
+        '<button class="btn btn-primary" id="tmSave">Guardar</button>' +
+        '<button type="button" class="btn btn-secondary" id="tmCancel">Cancelar</button>' +
+      '</div>';
+    openModal(html);
+    wireTimePicker('tmStart');
+    document.getElementById('tmCancel').addEventListener('click', function() {
+      openTurnoDetail(shift);
+    });
+    document.getElementById('tmNewHome').addEventListener('click', function() {
+      pendingTurnoDraft = { moveShiftId: shift.id };
+      openHogarModal(null, true);
+    });
+    document.getElementById('tmSave').addEventListener('click', function() {
+      var homeId = document.getElementById('tmHome').value;
+      if (!homeId) { toast('Elegí o creá un hogar primero'); return; }
+      shift.homeId = homeId;
+      shift.date = document.getElementById('tmDate').value;
+      shift.startTime = document.getElementById('tmStart').value;
+      shift.notes = document.getElementById('tmNotes').value;
+      save();
+      toast('Turno movido');
+      openTurnoDetail(shift);
+      renderAll();
+    });
   }
 
   function openTurnoModal(shift, presetDate) {
@@ -1954,7 +2107,7 @@
       });
       save();
       if (opts.returnToShift) {
-        openTurnoModal(getShift(opts.returnToShift));
+        openTurnoDetail(getShift(opts.returnToShift));
       } else if (opts.returnToHome) {
         openHogarModal(getHome(opts.returnToHome));
       } else {
@@ -2193,21 +2346,23 @@
         toast('Hogar creado');
       }
       save();
-      if (quickMode && pendingTurnoDraft) {
+      if (quickMode && pendingTurnoDraft && pendingTurnoDraft.moveShiftId) {
+        var moveShift = getShift(pendingTurnoDraft.moveShiftId);
+        pendingTurnoDraft = null;
+        openTurnoMoveModal(moveShift);
+        setTimeout(function() { document.getElementById('tmHome').value = savedHome.id; }, 0);
+      } else if (quickMode && pendingTurnoDraft) {
         var draft = pendingTurnoDraft;
         pendingTurnoDraft = null;
-        var shiftToEdit = draft.editingShiftId ? getShift(draft.editingShiftId) : null;
-        openTurnoModal(shiftToEdit, draft.date);
-        if (!shiftToEdit) {
-          setTimeout(function() {
-            document.getElementById('tHome').value = savedHome.id;
-            document.getElementById('tDate').value = draft.date;
-            document.getElementById('tStart').value = draft.startTime;
-            document.getElementById('tEnd').value = draft.endTime;
-            document.getElementById('tAmount').value = draft.amountDue || savedHome.rate || '';
-            document.getElementById('tNotes').value = draft.notes;
-          }, 0);
-        }
+        openTurnoModal(null, draft.date);
+        setTimeout(function() {
+          document.getElementById('tHome').value = savedHome.id;
+          document.getElementById('tDate').value = draft.date;
+          document.getElementById('tStart').value = draft.startTime;
+          document.getElementById('tEnd').value = draft.endTime;
+          document.getElementById('tAmount').value = draft.amountDue || savedHome.rate || '';
+          document.getElementById('tNotes').value = draft.notes;
+        }, 0);
       } else {
         closeModal();
       }
