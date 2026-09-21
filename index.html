@@ -1508,19 +1508,43 @@
     return (h > 0 ? h + 'h ' : '') + (m > 0 ? m + 'min' : (h > 0 ? '' : '0min'));
   }
 
-  // 07:00 a 19:00 en pasos de 15min, para no navegar 24 horas x 60 minutos al agendar.
-  function timeOptionsHtml(selected) {
-    var opts = [];
-    for (var h = 7; h <= 19; h++) {
-      for (var m = 0; m < 60; m += 15) {
-        if (h === 19 && m > 0) break;
-        opts.push(pad(h) + ':' + pad(m));
-      }
-    }
-    var extra = (selected && opts.indexOf(selected) === -1) ? [selected] : [];
-    return extra.concat(opts).map(function(v) {
+  // Hora acotada a 07-19 y minutos a 00/15/30/45, como dos selects chicos en vez
+  // de un único listado de 07:00 a 19:00 (que terminaba siendo 12*4 opciones).
+  function hourOptionsHtml(selected) {
+    var hours = [];
+    for (var h = 7; h <= 19; h++) hours.push(pad(h));
+    var extra = (selected && hours.indexOf(selected) === -1) ? [selected] : [];
+    return extra.concat(hours).map(function(v) {
       return '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + v + '</option>';
     }).join('');
+  }
+  function minuteOptionsHtml(selected) {
+    var mins = ['00', '15', '30', '45'];
+    var extra = (selected && mins.indexOf(selected) === -1) ? [selected] : [];
+    return extra.concat(mins).map(function(v) {
+      return '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + v + '</option>';
+    }).join('');
+  }
+  // Arma un <input type=hidden> con el valor "HH:MM" (para que el resto del código
+  // siga leyendo document.getElementById(id).value como si fuera un solo campo) más
+  // los dos selects visibles de hora y minuto que lo alimentan. Hay que llamar a
+  // wireTimePicker(id) después de insertar el HTML en el DOM.
+  function timePickerHtml(id, value) {
+    var parts = (value || '09:00').split(':');
+    var h = parts[0] || '09', m = parts[1] || '00';
+    return '<input type="hidden" id="' + id + '" value="' + h + ':' + m + '">' +
+      '<div style="display:flex;gap:6px;">' +
+        '<select id="' + id + 'Hour" style="flex:1;">' + hourOptionsHtml(h) + '</select>' +
+        '<select id="' + id + 'Min" style="flex:1;">' + minuteOptionsHtml(m) + '</select>' +
+      '</div>';
+  }
+  function wireTimePicker(id) {
+    var hourSel = document.getElementById(id + 'Hour');
+    var minSel = document.getElementById(id + 'Min');
+    var hidden = document.getElementById(id);
+    function sync() { hidden.value = hourSel.value + ':' + minSel.value; }
+    hourSel.addEventListener('change', sync);
+    minSel.addEventListener('change', sync);
   }
 
   function renderWorkTimerContent(shift, home) {
@@ -1627,7 +1651,7 @@
       '</div>' +
       '<div class="field"><label>Fecha</label><input type="date" id="tDate" value="' + date + '"></div>' +
       '<div class="field-row">' +
-        '<div class="field"><label>Hora inicio</label><select id="tStart">' + timeOptionsHtml(startTime) + '</select></div>' +
+        '<div class="field"><label>Hora inicio</label>' + timePickerHtml('tStart', startTime) + '</div>' +
         '<div class="field"><label>Hora fin (opcional)</label><input type="time" id="tEnd" value="' + endTime + '"></div>' +
       '</div>' +
       '<div class="field"><label>Monto a cobrar</label><input type="number" id="tAmount" value="' + amountDue + '" placeholder="0"></div>';
@@ -1678,6 +1702,7 @@
     '</div>';
 
     openModal(html);
+    wireTimePicker('tStart');
 
     var selectedRepeatDays = {};
     function renderRepeatDayTimes() {
@@ -1685,14 +1710,22 @@
       if (!box) return;
       var days = Object.keys(selectedRepeatDays).map(Number).sort();
       box.innerHTML = days.map(function(di) {
-        return '<div class="field-row"><div class="field" style="flex:none;width:88px;"><label>&nbsp;</label>' +
+        var parts = (selectedRepeatDays[di] || '09:00').split(':');
+        return '<div class="field-row"><div class="field" style="flex:none;width:70px;"><label>&nbsp;</label>' +
           '<span style="font-size:13px;font-weight:700;">' + WEEKDAYS[di] + '</span></div>' +
-          '<div class="field"><select data-day-time="' + di + '">' + timeOptionsHtml(selectedRepeatDays[di]) + '</select></div></div>';
+          '<div class="field"><select data-day-hour="' + di + '">' + hourOptionsHtml(parts[0]) + '</select></div>' +
+          '<div class="field"><select data-day-min="' + di + '">' + minuteOptionsHtml(parts[1]) + '</select></div></div>';
       }).join('');
-      box.querySelectorAll('[data-day-time]').forEach(function(sel) {
-        sel.addEventListener('change', function() {
-          selectedRepeatDays[Number(sel.getAttribute('data-day-time'))] = sel.value;
-        });
+      function syncDay(di) {
+        var h = box.querySelector('[data-day-hour="' + di + '"]').value;
+        var m = box.querySelector('[data-day-min="' + di + '"]').value;
+        selectedRepeatDays[di] = h + ':' + m;
+      }
+      box.querySelectorAll('[data-day-hour]').forEach(function(sel) {
+        sel.addEventListener('change', function() { syncDay(Number(sel.getAttribute('data-day-hour'))); });
+      });
+      box.querySelectorAll('[data-day-min]').forEach(function(sel) {
+        sel.addEventListener('change', function() { syncDay(Number(sel.getAttribute('data-day-min'))); });
       });
     }
     if (!isEdit) {
